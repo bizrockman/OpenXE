@@ -1,8 +1,47 @@
-# This file can be used to override defaults from the docker-compose.yml file
-# if it is copied/renamed to docker-compose.override.yml
+# Local development overrides for docker-compose.yml.
+# Copy this file to docker-compose.override.yml to enable.
+# docker-compose.override.yml is gitignored, so each developer
+# can adjust paths without affecting the repo.
+#
+# What this enables on top of the production compose:
+#   - Bind-mounts the repo into the app container so code edits
+#     are visible without rebuilding the image
+#   - Exposes ports to the host for direct browser/DB access
+#   - Maps your local userdata directory into the app container
+#   - Runs vite dev server for hot frontend reload (optional)
 
-version: '3.9'
 services:
+  app:
+    volumes:
+      - .:/var/www/html
+      # Replace this absolute path with where your migrated Xentral
+      # userdata lives on your machine. Override the named volume from
+      # docker-compose.yml so files are visible from your host:
+      # - /absolute/path/to/userdata:/var/www/html/userdata
+    ports:
+      - "8081:80"
+
+  app_init:
+    volumes:
+      - .:/var/www/html
+
+  mysql:
+    ports:
+      - "3306:3306"
+
   vite:
-    # Set this to your local uid:gid to run the frontend build as your user and keep the working directory clean
-    user: 1000:1000
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: frontend
+    image: openxe_frontend
+    entrypoint: npm run dev
+    volumes:
+      - .:/app
+      # Uncomment if npm install in the image gets shadowed by the
+      # bind mount and `vite: not found` errors appear:
+      # - /app/node_modules
+    ports:
+      - "5173:5173"
+    # Set this to your local uid:gid to keep the working directory clean:
+    # user: 1000:1000

@@ -1,62 +1,59 @@
-version: '3.9'
 services:
-  vite:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
-      target: frontend
-    image: openxe_frontend
-    entrypoint: npm run dev
-    volumes:
-      - .:/app
-    ports:
-      - "5173:5173"
-  app_init:
-    image: openxe:test
-    volumes:
-      - .:/var/www/html
-    working_dir: /var/www/html/upgrade
-    entrypoint: php data/upgrade.php -db -do
-    depends_on:
-      mysql:
-        condition: service_healthy
   app:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    image: openxe:test
+    image: openxe:bizrock
+    environment:
+      - SERVICE_FQDN_APP_80
+      - WFDB_HOST=mysql
+      - WFDB_PORT=3306
+      - WFDB_NAME=${MYSQL_DATABASE}
+      - WFDB_USER=${MYSQL_USER}
+      - WFDB_PASSWORD=${MYSQL_PASSWORD}
+      - WFUSERDATA=/var/www/html/userdata
     volumes:
-      - .:/var/www/html
-    ports:
-      - "8081:80"
+      - userdata:/var/www/html/userdata
     depends_on:
       app_init:
         condition: service_completed_successfully
       mysql:
         condition: service_healthy
+
+  app_init:
+    image: openxe:bizrock
+    working_dir: /var/www/html/upgrade
+    command: ["php", "data/upgrade.php", "-db", "-do"]
+    environment:
+      - WFDB_HOST=mysql
+      - WFDB_PORT=3306
+      - WFDB_NAME=${MYSQL_DATABASE}
+      - WFDB_USER=${MYSQL_USER}
+      - WFDB_PASSWORD=${MYSQL_PASSWORD}
+      - WFUSERDATA=/var/www/html/userdata
+    volumes:
+      - userdata:/var/www/html/userdata
+    depends_on:
+      mysql:
+        condition: service_healthy
+
   mysql:
     image: mariadb:10.11
     environment:
-      MYSQL_ROOT_PASSWORD: "rootpw"
-      MYSQL_USER: "openxe"
-      MYSQL_PASSWORD: "openxe"
-      MYSQL_DATABASE: "openxe"
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
       MARIADB_AUTO_UPGRADE: "1"
     volumes:
       - mysqldata:/var/lib/mysql
-    ports:
-      - "3306:3306"
     healthcheck:
       interval: 5s
       retries: 3
       test:
-        [
-          "CMD",
-          "healthcheck.sh",
-          "--connect",
-          "--innodb_initialized"
-        ]
+        ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       timeout: 30s
 
 volumes:
-  mysqldata: {}
+  mysqldata:
+  userdata:

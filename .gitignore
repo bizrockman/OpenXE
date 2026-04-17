@@ -9,3 +9,4 @@ docker-compose.override.yml
 debug.log
 gitinfo.json
 vendor/ezyang/htmlpurifier/library/HTMLPurifier/DefinitionCache/Serializer/HTML/
+.env
