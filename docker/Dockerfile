@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y ${DEB_PKG} ${DEB_PKG_TMP} && \
     mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
 COPY docker/php "$PHP_INI_DIR/conf.d/"
+RUN mkdir -p /usr/local/etc/openxe
+COPY docker/proxy-fix.php /usr/local/etc/openxe/proxy-fix.php
 RUN a2enmod rewrite
 COPY docker/apache-api.conf /etc/apache2/conf-enabled/api.conf
 COPY --chown=www-data:www-data . /var/www/html
