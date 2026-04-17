@@ -154,11 +154,10 @@ class Prozessstarter extends GenProzessstarter {
    */
   public function __construct($app, $intern = false) {
     $this->app=$app;
+    $this->logger = $this->app->Container->get('Logger');
     if($intern) {
       return;
     }
-
-    $this->logger = $this->app->Container->get('Logger');
 
     $this->app->ActionHandlerInit($this);
 
