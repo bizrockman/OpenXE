@@ -12,7 +12,7 @@ COPY www /app/www
 RUN npm run build
 
 #FROM php:8.1-fpm as fpm_server
-FROM php:8.1-apache as web_server
+FROM php:8.1-apache-bookworm as web_server
 ARG PHP_EXT
 ARG DEB_PKG
 ARG DEB_PKG_TMP
@@ -20,6 +20,7 @@ ARG DEB_PKG_TMP
 WORKDIR /app
 RUN apt-get update && apt-get install -y ${DEB_PKG} ${DEB_PKG_TMP} && \
     docker-php-ext-configure imap --with-kerberos --with-imap-ssl && \
+    docker-php-ext-configure gd --with-jpeg --with-freetype --with-webp --with-xpm && \
     docker-php-ext-install ${PHP_EXT} && \
     apt-get remove --purge -y ${DEB_PKG_TMP} && \
     mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
