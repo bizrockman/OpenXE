@@ -503,6 +503,30 @@ class ApiApplication
             ['Version1', 'Country', 'Generic', 'updateAction', 'edit_country']
         );
 
+        // Verkaufspreise
+        $collection->addRoute('GET', '/v1/verkaufspreise',
+            ['Version1', 'SalesPrice', 'Generic', 'listAction', 'list_articles']
+        );
+        $collection->addRoute('GET', '/v1/verkaufspreise/{id:\d+}',
+            ['Version1', 'SalesPrice', 'Generic', 'readAction', 'view_article']
+        );
+
+        // Bestellungen (Einkauf)
+        $collection->addRoute('GET', '/v1/bestellungen',
+            ['Version1', 'PurchaseOrder', 'Generic', 'listAction', 'list_orders']
+        );
+        $collection->addRoute('GET', '/v1/bestellungen/{id:\d+}',
+            ['Version1', 'PurchaseOrder', 'Generic', 'readAction', 'view_order']
+        );
+
+        // Bestellung-Positionen
+        $collection->addRoute('GET', '/v1/bestellungen_positionen',
+            ['Version1', 'PurchaseOrderPosition', 'Generic', 'listAction', 'list_orders']
+        );
+        $collection->addRoute('GET', '/v1/bestellungen_positionen/{id:\d+}',
+            ['Version1', 'PurchaseOrderPosition', 'Generic', 'readAction', 'view_order']
+        );
+
         // Lager-Charge
         $collection->addRoute('GET', '/v1/lagercharge',
             ['Version1', 'StorageBatch', 'Generic', 'listAction', 'view_storage_batch']
