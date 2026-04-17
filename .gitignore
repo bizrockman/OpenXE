@@ -6,3 +6,6 @@ node_modules/
 www/themes/new/css/custom.css
 docker-compose.override.yml
 .idea
+debug.log
+gitinfo.json
+vendor/ezyang/htmlpurifier/library/HTMLPurifier/DefinitionCache/Serializer/HTML/
