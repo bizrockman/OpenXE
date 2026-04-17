@@ -24,6 +24,7 @@ services:
     image: openxe:bizrock
     working_dir: /var/www/html/upgrade
     command: ["php", "data/upgrade.php", "-db", "-do"]
+    restart: "no"
     environment:
       - WFDB_HOST=mysql
       - WFDB_PORT=3306
