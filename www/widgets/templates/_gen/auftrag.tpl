@@ -460,7 +460,7 @@ function abweichend(cmd)
         {|Steuersatz normal|}:
     </td>
     <td>
-        [STEUERSATZ_NORMAL][MSGSTEUERSATZ_NORMAL]&nbsp;<span style="cursor: help; color: #888; font-weight: bold;" title="Prozentsatz, mit dem dieser Beleg berechnet wird (Default 19%). Bei EU-Reverse-Charge (B2B mit g&uuml;ltiger USt-ID) auf 0 setzen. Bei OSS-Verfahren (B2C EU &uuml;ber Lieferschwelle) auf den Satz des Ziellandes setzen (AT 20%, IT 22%, NL 21%, etc.). Dieses Feld &uuml;bersteuert die Default-Berechnung &mdash; setze es nur bewusst.">&#9432;</span>
+        [STEUERSATZ_NORMAL][MSGSTEUERSATZ_NORMAL]
     </td>
 </tr>
 </table>

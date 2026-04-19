@@ -411,6 +411,8 @@ $tooltip['auftrag']['edit']['#vorabbezahltmarkieren']="Wenn der Haken gesetzt is
 $tooltip['auftrag']['edit']['#ohne_artikeltext']="Die Artikelbeschreibung in allen Beleg-Positionen wird auf dem Beleg ausgeblendet.";
 $tooltip['auftrag']['edit']['#fastlane']="Dient als Markierung für Aufträge mit Prio.<br>Diese Aufträge erhalten dann in den Übersichten ein '(FL)' hinter der Auftragsnummern und können in der Auftrags-Übersicht, im Auftrags-Versandzentrum und im Lager-Versandzentrum gefiltert werden.";
 $tooltip['auftrag']['edit']['#ust_ok']="Automatisch gesetzt bei Besteuerung Inland";
+$tooltip['auftrag']['edit']['steuersatz_normal']="Prozentsatz, mit dem dieser Beleg berechnet wird (Default 19%).<br><br>Typische Override-F&auml;lle:<ul><li><b>0</b> bei EU-Reverse-Charge (B2B mit g&uuml;ltiger USt-ID)</li><li><b>Satz des Ziellandes</b> bei OSS-Verfahren (B2C EU &uuml;ber Lieferschwelle): AT 20 %, IT 22 %, NL 21 %, etc.</li></ul>Dieses Feld &uuml;bersteuert die Default-Berechnung &mdash; setze es nur bewusst.";
+$tooltip['auftrag']['create']['steuersatz_normal'] = $tooltip['auftrag']['edit']['steuersatz_normal'];
 $tooltip['auftrag']['create']['#kurs']="Der aktuelle Wechselkurs kann in der App 'Währung Umrechnung' von der European Central Bank abgerufen werden.";
 $tooltip['auftrag']['edit']['#kurs']=$tooltip['auftrag']['create']['#kurs'];
 
