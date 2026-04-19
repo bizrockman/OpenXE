@@ -2,10 +2,11 @@
 #
 # Values are based on the production Xentral installation that has
 # been running this database shape for years, with one deviation:
-# innodb_buffer_pool_size is raised from 512M to 2G because the
-# Coolify host has 8 GB RAM and the database is about 6 GB — more
-# cache = fewer disk reads, which was the bottleneck we observed
-# (72 % pool hit rate at 128M default, many full-table scans).
+# innodb_buffer_pool_size is raised from 512M to 4G because the
+# Coolify host has 8 GB RAM mostly idle (~16 % used) and the
+# working set is about 6 GB. 4 GB of pool means almost the entire
+# dataset fits in RAM, eliminating the disk thrashing we observed
+# at the 128M default (72 % pool hit rate, many full-table scans).
 #
 # Mount into the mariadb container as
 # /etc/mysql/conf.d/openxe.cnf (see docker-compose.yml).
@@ -13,7 +14,7 @@
 [mysqld]
 
 # --- InnoDB: the dominant factor for OpenXE read performance ---
-innodb_buffer_pool_size         = 2G
+innodb_buffer_pool_size         = 4G
 innodb_buffer_pool_instances    = 8
 innodb_log_file_size            = 1G
 innodb_log_buffer_size          = 10M
