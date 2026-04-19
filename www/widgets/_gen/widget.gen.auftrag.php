@@ -360,6 +360,9 @@ class WidgetGenauftrag
     $field = new HTMLCheckbox("keinsteuersatz","","","1","0","0");
     $this->form->NewField($field);
 
+    $field = new HTMLInput("steuersatz_normal","text","","6","","","","","","","","0","","");
+    $this->form->NewField($field);
+
     $field = new HTMLCheckbox("ust_ok","","","1","0","0");
     $this->form->NewField($field);
 

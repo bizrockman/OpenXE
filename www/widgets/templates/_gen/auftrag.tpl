@@ -455,6 +455,14 @@ function abweichend(cmd)
         [UST_OK]&nbsp;UST / Export gepr&uuml;ft + Freigabe f&uuml;r Versand
     </td>
 </tr>
+<tr>
+    <td>
+        {|Steuersatz normal|}&nbsp;<img class="wawitooltipicon" src="themes/new/images/tooltip_grau.png" title="Prozentsatz, mit dem dieser Beleg berechnet wird (Default 19%). Bei EU-Reverse-Charge (B2B mit g&uuml;ltiger USt-ID) auf 0 setzen. Bei OSS-Verfahren (B2C EU &uuml;ber Lieferschwelle) auf den Satz des Ziellandes setzen (AT 20%, IT 22%, NL 21%, etc.). Dieses Feld &uuml;bersteuert die Default-Berechnung &mdash; setze es nur bewusst.">:
+    </td>
+    <td>
+        [STEUERSATZ_NORMAL][MSGSTEUERSATZ_NORMAL]
+    </td>
+</tr>
 </table>
 </fieldset>
 
