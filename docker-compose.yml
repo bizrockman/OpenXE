@@ -54,6 +54,7 @@ services:
       MARIADB_AUTO_UPGRADE: "1"
     volumes:
       - mysqldata:/var/lib/mysql
+      - ./docker/mariadb.cnf:/etc/mysql/conf.d/openxe.cnf:ro
     healthcheck:
       interval: 5s
       retries: 3
