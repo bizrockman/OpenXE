@@ -350,6 +350,7 @@
         <table width="100%">
         <tr><td width="200">{|UST ID|}:</td><td>[USTID][MSGUSTID]</td></tr>
         <tr><td>{|Besteuerung|}:</td><td>[UST_BEFREIT][MSGUST_BEFREIT]&nbsp;[KEINSTEUERSATZ][MSGKEINSTEUERSATZ]&nbsp;{|ohne Hinweis bei EU oder Export|}</td></tr>
+        <tr><td>{|Steuersatz normal|}:</td><td>[STEUERSATZ_NORMAL][MSGSTEUERSATZ_NORMAL]</td></tr>
         </table>
         </fieldset>
 

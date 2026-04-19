@@ -413,6 +413,10 @@ $tooltip['auftrag']['edit']['#fastlane']="Dient als Markierung für Aufträge mi
 $tooltip['auftrag']['edit']['#ust_ok']="Automatisch gesetzt bei Besteuerung Inland";
 $tooltip['auftrag']['edit']['steuersatz_normal']="Prozentsatz, mit dem dieser Beleg berechnet wird (Default 19%).<br><br>Typische Override-F&auml;lle:<ul><li><b>0</b> bei EU-Reverse-Charge (B2B mit g&uuml;ltiger USt-ID)</li><li><b>Satz des Ziellandes</b> bei OSS-Verfahren (B2C EU &uuml;ber Lieferschwelle): AT 20 %, IT 22 %, NL 21 %, etc.</li></ul>Dieses Feld &uuml;bersteuert die Default-Berechnung &mdash; setze es nur bewusst.";
 $tooltip['auftrag']['create']['steuersatz_normal'] = $tooltip['auftrag']['edit']['steuersatz_normal'];
+$tooltip['rechnung']['edit']['steuersatz_normal'] = $tooltip['auftrag']['edit']['steuersatz_normal'];
+$tooltip['rechnung']['create']['steuersatz_normal'] = $tooltip['auftrag']['edit']['steuersatz_normal'];
+$tooltip['angebot']['edit']['steuersatz_normal'] = $tooltip['auftrag']['edit']['steuersatz_normal'];
+$tooltip['angebot']['create']['steuersatz_normal'] = $tooltip['auftrag']['edit']['steuersatz_normal'];
 $tooltip['auftrag']['create']['#kurs']="Der aktuelle Wechselkurs kann in der App 'Währung Umrechnung' von der European Central Bank abgerufen werden.";
 $tooltip['auftrag']['edit']['#kurs']=$tooltip['auftrag']['create']['#kurs'];
 

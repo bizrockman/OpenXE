@@ -525,6 +525,10 @@
                               <td>{|Brief Eingang am|}:</td>
                               <td>[USTBRIEF_EINGANG_AM][MSGUSTBRIEF_EINGANG_AM]</td>
                            </tr>
+                           <tr>
+                              <td>{|Steuersatz normal|}:</td>
+                              <td>[STEUERSATZ_NORMAL][MSGSTEUERSATZ_NORMAL]</td>
+                           </tr>
                         </table>
                      </fieldset>
                   </div>

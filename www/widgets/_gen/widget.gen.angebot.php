@@ -313,6 +313,9 @@ class WidgetGenangebot
     $field = new HTMLCheckbox("keinsteuersatz","","","1","0","0");
     $this->form->NewField($field);
 
+    $field = new HTMLInput("steuersatz_normal","text","","6","","","","","","","","0","","");
+    $this->form->NewField($field);
+
     $field = new HTMLSelect("anzeigesteuer",0,"anzeigesteuer","","","0");
     $field->AddOption('automatisch','0');
     $field->AddOption('netto','3');

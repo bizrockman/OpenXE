@@ -322,6 +322,9 @@ class WidgetGenrechnung
     $field = new HTMLCheckbox("keinsteuersatz","","","1","0","0");
     $this->form->NewField($field);
 
+    $field = new HTMLInput("steuersatz_normal","text","","6","","","","","","","","0","","");
+    $this->form->NewField($field);
+
     $field = new HTMLCheckbox("ustbrief","","","1","0","0");
     $this->form->NewField($field);
 
