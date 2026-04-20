@@ -24,4 +24,11 @@ EOF
     chown www-data:www-data /var/www/html/conf/user.inc.php 2>/dev/null || true
 fi
 
+# Regenerate the login-page logo cache from the DB on every start.
+# This is fire-and-forget — failures don't block container boot.
+# The script itself logs to stderr and exits 0 on any error.
+if [ -f /usr/local/bin/export-logo.php ]; then
+    php /usr/local/bin/export-logo.php || true
+fi
+
 exec docker-php-entrypoint "$@"

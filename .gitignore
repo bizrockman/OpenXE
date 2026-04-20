@@ -4,6 +4,7 @@ userdata
 www/cache/
 node_modules/
 www/themes/new/css/custom.css
+www/themes/new/images/logo_cache.png
 docker-compose.override.yml
 .idea
 debug.log

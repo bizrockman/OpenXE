@@ -34,6 +34,7 @@ COPY --chown=www-data:www-data . /var/www/html
 COPY --chown=www-data:www-data --from=frontend /app/www/dist /var/www/html/www/dist
 
 COPY docker/entrypoint.sh /usr/local/bin/openxe-entrypoint.sh
+COPY docker/export-logo.php /usr/local/bin/export-logo.php
 RUN chmod +x /usr/local/bin/openxe-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/openxe-entrypoint.sh"]
 CMD ["apache2-foreground"]
