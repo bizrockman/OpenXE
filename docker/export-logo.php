@@ -47,15 +47,18 @@ if (!$mysqli) {
     exit(0);
 }
 
+// firmenlogoaktiv is a key/value setting in OpenXE (resolved via the
+// Firmendaten() helper), not a column on firmendaten. We only care
+// whether there's bytes in the blob — if yes, write the cache file.
 $row = null;
-if ($res = @$mysqli->query("SELECT firmenlogo, firmenlogoaktiv FROM firmendaten WHERE id=1 LIMIT 1")) {
+if ($res = @$mysqli->query("SELECT firmenlogo FROM firmendaten WHERE id=1 LIMIT 1")) {
     $row = $res->fetch_assoc();
     $res->free();
 }
 $mysqli->close();
 
-if (!$row || empty($row['firmenlogo']) || $row['firmenlogoaktiv'] !== '1') {
-    fwrite(STDERR, "[logo] no active firmenlogo in DB, skipping logo export\n");
+if (!$row || empty($row['firmenlogo'])) {
+    fwrite(STDERR, "[logo] no firmenlogo in DB, skipping logo export\n");
     exit(0);
 }
 
