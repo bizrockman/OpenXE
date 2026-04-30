@@ -3,10 +3,156 @@
 namespace Xentral\Modules\Api\Resource;
 
 use Xentral\Components\Database\SqlQuery\SelectQuery;
+use Xentral\Components\Database\SqlQuery\UpdateQuery;
 
 class ArticleResource extends AbstractResource
 {
     const TABLE_NAME = 'artikel';
+
+    /**
+     * System-managed columns the API must never touch on update/insert.
+     * Reasons: primary key, audit / change-tracking, computed caches,
+     * timestamps that the application sets itself, and obsolete shop
+     * fields whose use is being phased out via the artikel_shop table.
+     */
+    private const SYSTEM_FIELDS = [
+        'id',
+        'checksum',
+        'hinzugefuegt',
+        'usereditid',
+        'useredittimestamp',
+        'intern_gesperrtuser',
+        'inbearbeitunguser',
+        'inbearbeitung',
+        'logdatei',
+        'laststorage_changed',
+        'laststorage_sync',
+        'cache_lagerplatzinhaltmenge',
+        'shop',
+        'shop2',
+        'shop3',
+    ];
+
+    /**
+     * Every flat scalar column on the `artikel` table that the API allows
+     * a client to write through PUT. We deliberately list these explicitly
+     * rather than discovering them via INFORMATION_SCHEMA, so adding a new
+     * column to the database does not silently make it writable through
+     * the public API.
+     *
+     * Notes on a few fields a caller is most likely to set:
+     * - `typ`        : the article category (UI dropdown). Value format
+     *                  is "<artikelkategorien.id>_kat", e.g. "2_kat".
+     *                  Legacy fallback keys exist (e.g. "produkt",
+     *                  "module") when artikelkategorien is empty.
+     * - `nummer`     : article number, must be unique on the table.
+     * - `geloescht`  : 0 / 1; soft-delete marker.
+     * - `warengruppe`: free-text category label, NOT a foreign key.
+     */
+    private const WRITABLE_FIELDS = [
+        // Identifying / classification
+        'typ', 'nummer', 'projekt', 'inaktiv', 'ausverkauft', 'warengruppe',
+        'klasse', 'adresse', 'firma', 'kostenstelle', 'abckategorie',
+
+        // Names / descriptions (de + en)
+        'name_de', 'name_en', 'kurztext_de', 'kurztext_en',
+        'beschreibung_de', 'beschreibung_en', 'uebersicht_de', 'uebersicht_en',
+        'links_de', 'links_en', 'startseite_de', 'startseite_en',
+        'sonderaktion', 'sonderaktion_en',
+        'anabregs_text', 'anabregs_text_en', 'hinweis_einfuegen',
+        'metatitle_de', 'metatitle_en',
+        'metadescription_de', 'metadescription_en',
+        'metakeywords_de', 'metakeywords_en',
+        'katalogtext_de', 'katalogtext_en',
+        'katalogbezeichnung_de', 'katalogbezeichnung_en',
+
+        // Visuals / media
+        'standardbild', 'bildvorschau',
+
+        // Manufacturer / barcode / external IDs
+        'hersteller', 'herstellerlink', 'herstellernummer', 'barcode', 'ean',
+        'webid', 'pcbdecal',
+
+        // Inventory / logistics
+        'lager_platz', 'lagerartikel', 'lieferzeit', 'lieferzeitmanuell',
+        'lieferzeitmanuell_en', 'mindestlager', 'mindestbestellung',
+        'pseudolager', 'lagerkorrekturwert', 'autolagerlampe',
+        'mindesthaltbarkeitsdatum', 'inventursperre', 'inventurekaktiv',
+        'inventurek', 'restmenge', 'nachbestellt', 'autobestellung',
+        'autoabgleicherlaubt',
+
+        // Physical / shipping
+        'gewicht', 'nettogewicht', 'laenge', 'breite', 'hoehe',
+        'porto', 'gebuehr', 'einheit', 'herkunftsland', 'ursprungsregion',
+        'zolltarifnummer',
+
+        // Production / parts
+        'teilbar', 'nteile', 'seriennummern', 'letzteseriennummer',
+        'stueckliste', 'juststueckliste', 'endmontage', 'funktionstest',
+        'artikelcheckliste', 'produktion', 'produktioninfo',
+        'externeproduktion', 'chargenverwaltung',
+        'has_preproduced_partlist', 'preproduced_partlist',
+
+        // Variants
+        'variante', 'variante_von', 'variante_kopie', 'unikat',
+        'unikatbeikopie', 'matrixprodukt', 'individualartikel',
+        'generierenummerbeioption',
+
+        // Sales / shop
+        'shopartikel', 'unishopartikel', 'journalshopartikel', 'katalog',
+        'startseite', 'topseller', 'neu', 'wichtig',
+        'partnerprogramm_sperre', 'keineeinzelartikelanzeigen', 'allelieferanten', 'downloadartikel',
+
+        // Pricing / VAT / accounts
+        'umsatzsteuer', 'steuersatz', 'pseudopreis', 'rabatt', 'rabatt_prozent',
+        'keinrabatterlaubt', 'keinskonto', 'tagespreise',
+        'berechneterek', 'verwendeberechneterek', 'berechneterekwaehrung',
+        'artikelautokalkulation', 'artikelabschliessenkalkulation',
+        'artikelfifokalkulation', 'kontorahmen', 'steuergruppe', 'xvp',
+        'ohnepreisimpdf', 'vkmeldungunterdruecken',
+
+        // Tax routing — Sachkonten per scenario
+        'steuer_erloese_inland_normal', 'steuer_aufwendung_inland_normal',
+        'steuer_erloese_inland_ermaessigt', 'steuer_aufwendung_inland_ermaessigt',
+        'steuer_erloese_inland_steuerfrei', 'steuer_aufwendung_inland_steuerfrei',
+        'steuer_erloese_inland_innergemeinschaftlich',
+        'steuer_aufwendung_inland_innergemeinschaftlich',
+        'steuer_erloese_inland_eunormal', 'steuer_aufwendung_inland_eunormal',
+        'steuer_erloese_inland_euermaessigt', 'steuer_aufwendung_inland_euermaessigt',
+        'steuer_erloese_inland_nichtsteuerbar',
+        'steuer_aufwendung_inland_nichtsteuerbar',
+        'steuer_erloese_inland_export', 'steuer_aufwendung_inland_import',
+        'steuer_art_produkt', 'steuer_art_produkt_download',
+        'steuertext_innergemeinschaftlich', 'steuertext_export',
+
+        // Status / lifecycle
+        'gesperrt', 'sperrgrund', 'geloescht', 'gueltigbis',
+        'intern_gesperrt', 'intern_gesperrtgrund',
+        'internerkommentar', 'internkommentar',
+        'freigabenotwendig', 'freigaberegel', 'altersfreigabe',
+        'provisionssperre', 'provisionsartikel',
+        'serviceartikel', 'dienstleistung', 'geraet',
+
+        // MLM / commissions
+        'mlmpunkte', 'mlmbonuspunkte', 'mlmdirektpraemie',
+        'mlmkeinepunkteeigenkauf',
+
+        // Sundry
+        'sonstiges', 'leerfeld', 'rohstoffe',
+        'etikettautodruck', 'autodrucketikett',
+        'formelmenge', 'formelpreis',
+        'bestandalternativartikel',
+
+        // Free text fields 1..40
+        'freifeld1', 'freifeld2', 'freifeld3', 'freifeld4', 'freifeld5',
+        'freifeld6', 'freifeld7', 'freifeld8', 'freifeld9', 'freifeld10',
+        'freifeld11', 'freifeld12', 'freifeld13', 'freifeld14', 'freifeld15',
+        'freifeld16', 'freifeld17', 'freifeld18', 'freifeld19', 'freifeld20',
+        'freifeld21', 'freifeld22', 'freifeld23', 'freifeld24', 'freifeld25',
+        'freifeld26', 'freifeld27', 'freifeld28', 'freifeld29', 'freifeld30',
+        'freifeld31', 'freifeld32', 'freifeld33', 'freifeld34', 'freifeld35',
+        'freifeld36', 'freifeld37', 'freifeld38', 'freifeld39', 'freifeld40',
+    ];
 
     /** @var \Api $legacyApi */
     private $legacyApi;
@@ -61,36 +207,29 @@ class ArticleResource extends AbstractResource
             'typ' => 'a.typ',
         ]);
 
-        $this->registerValidationRules([
-            'id' => 'not_present',
-            'a.shop' => 'not_present',
-            'a.shop2' => 'not_present',
-            'a.shop3' => 'not_present',
-            'a.usereditid' => 'not_present',
-            'a.useredittimestamp' => 'not_present',
-            'a.intern_gesperrtuser' => 'not_present',
-            'a.inbearbeitunguser' => 'not_present',
-            'nummer' => 'required|unique:artikel,nummer',
-            'projekt' => 'numeric',
-            'adresse' => 'numeric',
-            'katalog' => 'numeric',
-            'firma' => 'numeric',
-            'ausverkauft' => 'in:0,1',
-            'geloescht' => 'in:0,1',
+        // Build the rules array programmatically from the constants above:
+        // every system field is locked, every writable field is allowed
+        // through with no further constraint (Rakit treats an empty rule
+        // as "field is optional, accept any value"), and a small handful
+        // of fields get specific constraints.
+        $rules = [];
+        foreach (self::SYSTEM_FIELDS as $field) {
+            $rules[$field] = 'not_present';
+        }
+        foreach (self::WRITABLE_FIELDS as $field) {
+            $rules[$field] = '';
+        }
 
-            // Keine Default-Values
-            /*'checksum' => 'present',
-            'kurztext_de' => 'present',
-            'kurztext_en' => 'present',
-            'beschreibung_de' => 'present',
-            'beschreibung_en' => 'present',
-            'uebersicht_de' => 'present',
-            'uebersicht_en' => 'present',
-            'links_de' => 'present',
-            'links_en' => 'present',
-            'startseite_de' => 'present',
-            'startseite_en' => 'present',*/
-        ]);
+        // Field-specific overrides
+        $rules['nummer']      = 'unique:artikel,nummer';   // dropped 'required' to allow partial PUT
+        $rules['projekt']     = 'numeric';
+        $rules['adresse']     = 'numeric';
+        $rules['katalog']     = 'numeric';
+        $rules['firma']       = 'numeric';
+        $rules['ausverkauft'] = 'in:0,1';
+        $rules['geloescht']   = 'in:0,1';
+
+        $this->registerValidationRules($rules);
 
         $this->registerIncludes([
             'projekt' => [
@@ -430,11 +569,11 @@ class ArticleResource extends AbstractResource
     }
 
     /**
-     * @return false
+     * @return UpdateQuery
      */
     protected function updateQuery()
     {
-        return false;
+        return $this->db->update()->table(self::TABLE_NAME)->where('id = :id');
     }
 
     /**

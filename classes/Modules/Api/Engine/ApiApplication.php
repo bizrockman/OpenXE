@@ -317,9 +317,9 @@ class ApiApplication
         $collection->addRoute('GET', '/v1/artikel/{id:\d+}',
             ['Version1', 'Article', 'Generic', 'readAction', 'view_article']
         );
-        /*$collection->addRoute('PUT', '/v1/artikel/{id:\d+}',
-            array('Version1', 'Article', 'Generic', 'updateAction')
-        );*/
+        $collection->addRoute('PUT', '/v1/artikel/{id:\d+}',
+            ['Version1', 'Article', 'Generic', 'updateAction', 'edit_article']
+        );
 
         // Eigenschaften
         $collection->addRoute('GET', '/v1/eigenschaften',
