@@ -79,6 +79,31 @@ trait ValidationFeatureTrait
     }
 
     /**
+     * Reduce input to keys that have a registered validation rule.
+     *
+     * Rakit/Validation does not reject unknown keys by default, so without
+     * an extra filter step a client could send any extra field that happens
+     * to match a real column on the table and have it written. This
+     * tightens insert/update so only fields the resource has explicitly
+     * declared in registerValidationRules() can ever reach the SQL builder.
+     *
+     * Identifier-injection through column names is already prevented by
+     * Aura's backtick-quoting, but the column-itself-must-be-allowlisted
+     * property is what application authors actually expect.
+     *
+     * @param array $inputVars
+     *
+     * @return array
+     */
+    protected function filterToValidatedKeys(array $inputVars)
+    {
+        if (empty($this->validationRules)) {
+            return $inputVars;
+        }
+        return array_intersect_key($inputVars, $this->validationRules);
+    }
+
+    /**
      * @param string $tableName
      */
     protected function setTableName($tableName)

@@ -267,6 +267,12 @@ abstract class AbstractResource
 
         // Eingabe validieren
         $this->validateData($inputVars, $id);
+
+        // Auf registrierte Felder beschränken (Whitelist).
+        // Verhindert dass undeklarierte Keys, die zufällig Spalten der
+        // Tabelle treffen, mit-aktualisiert werden. Siehe filterToValidatedKeys().
+        $inputVars = $this->filterToValidatedKeys($inputVars);
+
         $inputVars['id'] = $id;
 
         // Eingabe- zu Datenbankfeld mappen
@@ -307,6 +313,11 @@ abstract class AbstractResource
 
         // Eingabe validieren
         $this->validateData($inputVars);
+
+        // Auf registrierte Felder beschränken (Whitelist).
+        // Verhindert dass undeklarierte Keys, die zufällig Spalten der
+        // Tabelle treffen, mit-eingefügt werden. Siehe filterToValidatedKeys().
+        $inputVars = $this->filterToValidatedKeys($inputVars);
 
         // Eingabe- zu Datenbankfeld mappen
         $inputVars = $this->mapInputData($inputVars, $inputMapping);
