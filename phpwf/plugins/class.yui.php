@@ -2107,11 +2107,25 @@ class YUI {
           $bezeichnunglieferant = $this->app->Secure->GetPOST("bezeichnunglieferant");
           $waehrung = $this->app->Secure->GetPOST("waehrung");
 
-          if($waehrung=="") 
+          if($waehrung=="")
             $waehrung = $this->app->DB->Select("SELECT waehrung FROM $module WHERE id='$id' LIMIT 1");
 
           if($this->app->erp->Firmendaten("bestellungmitartikeltext")!="1")
             $beschreibung = "";
+
+          // VPE aus dem passenden Einkaufspreis uebernehmen, wenn das Formular
+          // keine liefert (das Schnellanlegen-Formular hat kein VPE-Feld, daher
+          // kommt hier sonst immer '1' an). Ohne VPE auf der Position weist das
+          // Bestellungs-PDF die Menge nicht in Verpackungseinheiten aus.
+          if ($vpe <= 1) {
+            $ekid = $this->app->erp->Einkaufspreis($artikel_id, $menge, $adresse);
+            if ($ekid) {
+              $ekvpe = $this->app->DB->Select("SELECT vpe FROM einkaufspreise WHERE id = '".(int)$ekid."' LIMIT 1");
+              if ((int)$ekvpe > 1) {
+                $vpe = (int)$ekvpe;
+              }
+            }
+          }
 
 
           //hier muesste man beeichnung bei lieferant auch noch speichern .... oder beides halt
