@@ -87,6 +87,10 @@ services:
       - --explicit_defaults_for_timestamp=1
       - --log_bin_trust_function_creators=1
       - --skip-log-bin
+    # Nur auf localhost des Hosts gebunden - von aussen unerreichbar,
+    # gedacht fuer SSH-Tunnel (z.B. -L 3311:127.0.0.1:3306).
+    ports:
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysqldata:/var/lib/mysql
     healthcheck:
