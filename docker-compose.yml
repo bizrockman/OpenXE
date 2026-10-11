@@ -26,6 +26,32 @@ services:
       mysql:
         condition: service_healthy
 
+  # Prozessstarter-Cron: ersetzt den Coolify Scheduled Task. Laeuft fest als
+  # www-data, damit alles, was die Cronjobs anlegen (Bild-Cache, PDF-Archiv,
+  # DMS-Verzeichnisse), fuer Apache-Requests schreibbar bleibt. Ein als root
+  # laufender Cron hat wiederholt root-owned Cache-Verzeichnisse erzeugt und
+  # damit Web-Requests (Bildskalierung, PDF) zum Absturz gebracht.
+  cron:
+    image: openxe:bizrock
+    user: "33:33"  # www-data
+    # Entrypoint bleibt aktiv: er generiert conf/user.inc.php aus den
+    # WFDB_*-Variablen, das braucht starter.php fuer die DB-Verbindung.
+    command: ["bash", "-c", "sleep 90; while true; do php /var/www/html/cronjobs/starter.php; sleep 60; done"]
+    environment:
+      - WFDB_HOST=mysql
+      - WFDB_PORT=3306
+      - WFDB_NAME=${MYSQL_DATABASE}
+      - WFDB_USER=${MYSQL_USER}
+      - WFDB_PASSWORD=${MYSQL_PASSWORD}
+      - WFUSERDATA=/var/www/html/userdata
+    volumes:
+      - userdata:/var/www/html/userdata
+    depends_on:
+      app:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+
   app_init:
     image: openxe:bizrock
     working_dir: /var/www/html/upgrade
