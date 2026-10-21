@@ -11,8 +11,11 @@ COPY resources /app/resources
 COPY www /app/www
 RUN npm run build
 
-#FROM php:8.1-fpm as fpm_server
-FROM php:8.1-apache-bookworm as web_server
+# PHP 8.3: 8.1 ist seit 2025-12-31 EOL und erhaelt keine Security-Fixes mehr.
+# CVE-2026-109618/-109619 (Critical, unauth RCE gegen mod_php) sind nur in
+# 8.2.35+/8.3.36+/8.4.27+ gefixt. 8.3 statt 8.2 (Support bis Ende 2027 statt
+# Ende 2026); nicht 8.4, weil dort ext-imap aus dem Core entfernt wurde.
+FROM php:8.3-apache-bookworm as web_server
 ARG PHP_EXT
 ARG DEB_PKG
 ARG DEB_PKG_TMP
