@@ -32,6 +32,15 @@ services:
   # laufender Cron hat wiederholt root-owned Cache-Verzeichnisse erzeugt und
   # damit Web-Requests (Bildskalierung, PDF) zum Absturz gebracht.
   cron:
+    # build-Sektion noetig, obwohl das Image identisch zu app ist:
+    # Coolify macht vor dem Umschalten "docker compose pull
+    # --ignore-buildable". Services OHNE build-Sektion werden dabei
+    # nicht uebersprungen, der Pull von openxe:bizrock gegen Docker Hub
+    # schlaegt fehl und bricht den ganzen Deploy ab. Compose dedupliziert
+    # den Build ueber das gemeinsame Image-Tag, gebaut wird nur einmal.
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     image: openxe:bizrock
     user: "33:33"  # www-data
     # Entrypoint bleibt aktiv: er generiert conf/user.inc.php aus den
@@ -53,6 +62,10 @@ services:
         condition: service_healthy
 
   app_init:
+    # build-Sektion aus demselben Grund wie beim cron-Service (siehe oben).
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     image: openxe:bizrock
     working_dir: /var/www/html/upgrade
     command: ["php", "data/upgrade.php", "-db", "-do"]

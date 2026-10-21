@@ -2,7 +2,7 @@ ARG PHP_EXT="gd ldap imap mysqli soap zip"
 ARG DEB_PKG="libc-client2007e libaom3 libavif15 libdav1d6 libfreetype6 libjpeg62-turbo libldap-common libpng16-16 libwebp7 libxpm4 libzip4"
 ARG DEB_PKG_TMP="cmake gnutls-dev libaom-dev libavif-dev libbz2-dev libc-client-dev libdav1d-dev libfreetype6-dev libjpeg62-turbo-dev libkrb5-dev libldap2-dev libpng-dev libssl-dev libwebp-dev libxml2-dev libxpm-dev libzip-dev zlib1g-dev"
 
-FROM node:20 as frontend
+FROM node:20 AS frontend
 WORKDIR /app
 COPY package.json package-lock.json vite.config.js /app/
 RUN npm install
@@ -15,7 +15,7 @@ RUN npm run build
 # CVE-2026-109618/-109619 (Critical, unauth RCE gegen mod_php) sind nur in
 # 8.2.35+/8.3.36+/8.4.27+ gefixt. 8.3 statt 8.2 (Support bis Ende 2027 statt
 # Ende 2026); nicht 8.4, weil dort ext-imap aus dem Core entfernt wurde.
-FROM php:8.3-apache-bookworm as web_server
+FROM php:8.3-apache-bookworm AS web_server
 ARG PHP_EXT
 ARG DEB_PKG
 ARG DEB_PKG_TMP
