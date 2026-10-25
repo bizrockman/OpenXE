@@ -251,6 +251,14 @@ class ArticleResource extends AbstractResource
                 'sort' => ['menge' => 'ASC'],
                 'resource' => SalesPriceResource::class,
             ],
+            'einkaufspreise' => [
+                'key' => 'einkaufspreise',
+                'filter' => [
+                    ['property' => 'artikel', 'value' => ':id'],
+                ],
+                'sort' => ['menge' => 'ASC'],
+                'resource' => PurchasePriceResource::class,
+            ],
             'dateien' => [
                 'key' => 'dateien',
                 'filter' => [

@@ -511,6 +511,14 @@ class ApiApplication
             ['Version1', 'SalesPrice', 'Generic', 'readAction', 'view_article']
         );
 
+        // Einkaufspreise (nur lesend)
+        $collection->addRoute('GET', '/v1/einkaufspreise',
+            ['Version1', 'PurchasePrice', 'Generic', 'listAction', 'list_articles']
+        );
+        $collection->addRoute('GET', '/v1/einkaufspreise/{id:\d+}',
+            ['Version1', 'PurchasePrice', 'Generic', 'readAction', 'view_article']
+        );
+
         // Bestellungen (Einkauf)
         $collection->addRoute('GET', '/v1/bestellungen',
             ['Version1', 'PurchaseOrder', 'Generic', 'listAction', 'list_orders']
