@@ -24,6 +24,7 @@ class lieferantengutschrift {
         $this->app->ActionHandler("editpos", "lieferantengutschrift_editpos");
         $this->app->ActionHandler("dateien", "lieferantengutschrift_dateien");
         $this->app->ActionHandler("inlinepdf", "lieferantengutschrift_inlinepdf");
+        $this->app->ActionHandler("pdf", "lieferantengutschrift_pdf");
         $this->app->ActionHandler("positioneneditpopup", "lieferantengutschrift_positioneneditpopup");
         $this->app->ActionHandler("freigabe", "lieferantengutschrift_freigabe");
         $this->app->ActionHandler("freigabeeinkauf", "lieferantengutschrift_freigabeeinkauf");
@@ -33,6 +34,7 @@ class lieferantengutschrift {
         $this->app->ActionHandler("ruecksetzenbuchhaltung", "lieferantengutschrift_ruecksetzenbuchhaltung");
         $this->app->ActionHandler("ruecksetzenbezahlt", "lieferantengutschrift_ruecksetzenbezahlt");     
         $this->app->ActionHandler("minidetail", "lieferantengutschrift_minidetail");
+        $this->app->ActionHandler("auslieferschein", "lieferantengutschrift_auslieferschein");
 
         $this->app->DefaultActionHandler("list");
         $this->app->ActionHandlerListen($app);
@@ -625,8 +627,12 @@ class lieferantengutschrift {
             case 'speichern':
                    // Write to database            
                 // Add checks here
+                
+                $freigabe = $this->app->DB->SelectArr("SELECT rechnungsfreigabe, freigabe, adresse, belegnr FROM lieferantengutschrift WHERE id =".$id)[0];
 
-                $freigabe = $this->app->DB->SelectArr("SELECT rechnungsfreigabe, freigabe, adresse, belegnr FROM lieferantengutschrift WHERE id =".$id)[0];             
+                if ($lieferantengutschrift_from_db['status'] != 'abgeschlossen' && $lieferantengutschrift_from_db['status'] != 'storniert') {
+                    $this->app->DB->Update("UPDATE lieferantengutschrift SET belastungsanzeige = ".$input['belastungsanzeige']." WHERE id = ".$id);
+                }
 
                 if ($freigabe['rechnungsfreigabe'] || $freigabe['freigabe']) {
                     $internebemerkung = $input['internebemerkung'];
@@ -950,8 +956,10 @@ class lieferantengutschrift {
                                                      v.beschreibung,
                                                      v.sachkonto,
                                                      v.internebemerkung,
-                                                     a.lieferantennummer,                                                        
-                                                     a.name AS adresse_name FROM lieferantengutschrift v LEFT JOIN adresse a ON a.id = v.adresse"." WHERE v.id=$id");
+                                                     v.belastungsanzeige,
+                                                     a.lieferantennummer,
+                                                     a.name AS adresse_name
+                                                FROM lieferantengutschrift v LEFT JOIN adresse a ON a.id = v.adresse"." WHERE v.id=$id");
 
         foreach ($result[0] as $key => $value) {
             $this->app->Tpl->Set(strtoupper($key), $value);   
@@ -960,6 +968,8 @@ class lieferantengutschrift {
         if (!empty($result[0])) {
             $lieferantengutschrift_from_db = $result[0];
         }
+
+      	$this->app->Tpl->Set('BELASTUNGSANZEIGECHECKED', $lieferantengutschrift_from_db['belastungsanzeige']==1?"checked":"");
 
         // Check  positions        
         $pos_check = $this->check_positions($lieferantengutschrift_from_db['id'],$lieferantengutschrift_from_db['betrag']);                         
@@ -1003,8 +1013,12 @@ class lieferantengutschrift {
                 $lieferantengutschrift_from_db['freigabe'] = 0;
                 $this->app->YUI->Message('warning',"lieferantengutschrift r&uuml;ckgesetzt (Einkauf)");        
             }
-        }                    
+        }   
        
+        if (!$lieferantengutschrift_from_db['belastungsanzeige'] && empty($lieferantengutschrift_from_db['rechnung'])) {
+            $this->app->YUI->Message('error',"Lieferantengutschrifts-Nr. fehlt");
+        }
+
         /*
          * Add displayed items later
          * 
@@ -1057,7 +1071,7 @@ class lieferantengutschrift {
             $this->app->Tpl->Set('FREIGABEBEZAHLTHIDDEN','hidden');
         } else {
             $this->app->Tpl->Set('RUECKSETZENBEZAHLTHIDDEN','hidden');
-        }                    
+        }
 
       	$this->app->Tpl->Set('WARENEINGANGCHECKED', $lieferantengutschrift_from_db['freigabe']==1?"checked":"");
       	$this->app->Tpl->Set('RECHNUNGSFREIGABECHECKED', $lieferantengutschrift_from_db['rechnungsfreigabe']==1?"checked":"");
@@ -1108,6 +1122,10 @@ class lieferantengutschrift {
             $this->app->Tpl->Set('INLINEPDF', $iframe);
         } else {
             $this->app->Tpl->Set('INLINEPDF', 'Keine Dateien vorhanden.');
+        }
+
+        if ($lieferantengutschrift_from_db['belastungsanzeige']) {
+            $this->app->Tpl->Add('PDFLINK',"<a href=\"index.php?module=lieferantengutschrift&action=pdf&id=".$id."\" target=\"_blank\"><img src=\"./themes/new/images/pdf.svg\" title=\"Belastungsanzeige PDF\" border=\"0\"></a>");
         }
                
         $tickets = $this->app->erp->GetBelegTickets('lieferantengutschrift',$id);
@@ -1249,6 +1267,7 @@ class lieferantengutschrift {
 	    $input['rechnungsdatum'] = $this->app->Secure->GetPOST('rechnungsdatum');
 	    $input['kostenstelle'] = $this->app->Secure->GetPOST('kostenstelle');
 	    $input['internebemerkung'] = $this->app->Secure->GetPOST('internebemerkung');
+    	$input['belastungsanzeige'] = !empty($this->app->Secure->GetPOST('belastungsanzeige'))?"1":"0";
         return $input;
     }
 
@@ -1327,6 +1346,13 @@ class lieferantengutschrift {
         $this->app->ExitXentral();
     }
   
+    function lieferantengutschrift_pdf() {
+        $id = $this->app->Secure->GetGET('id');
+        $Brief = new LieferantengutschriftPDF($this->app,$projekt);
+        $Brief->GetLieferantengutschrift($id);
+        $Brief->displayDocument($schreibschutz); 
+    }
+
     function lieferantengutschrift_freigabe()
     {      
         $id = $this->app->Secure->GetGET('id');
@@ -1545,6 +1571,10 @@ class lieferantengutschrift {
 
         $id = $this->app->Secure->GetGET('id');  
 
+        if (empty($id)) {
+            return;
+        }
+
         $result = $this->app->DB->SelectArr("SELECT SQL_CALC_FOUND_ROWS 
                                                 v.id,
                                                 v.belegnr,
@@ -1655,6 +1685,8 @@ class lieferantengutschrift {
         );
         $tmp->AddRow($row);
         $tmp->DisplayNew('ARTIKEL',"Sachkonto","noAction");
+
+        $this->app->Tpl->Set('ZAHLUNGEN',$this->app->YUI->BelegZahlungHTMLTable($id, 'lieferantengutschrift'));
 
         $tmp = new EasyTable($this->app);
         $tmp->Query("SELECT zeit,bearbeiter,grund FROM lieferantengutschrift_protokoll WHERE lieferantengutschrift='$id' ORDER by zeit DESC",0,"");
@@ -1817,6 +1849,53 @@ class lieferantengutschrift {
         $this->app->DB->Insert($sql);
         $id = $this->app->DB->GetInsertID();
         return($id);
+    }
+
+    function lieferantengutschrift_auslieferschein() {
+        $lieferscheinid = $this->app->Secure->GetGET('lieferschein');
+        $lieferscheindata = $this->app->DB->SelectRow("SELECT * from lieferschein WHERE id = '".$lieferscheinid."'");
+        $adresse = $lieferscheindata['adresse'];
+
+        if (empty($lieferscheindata['adresse'])) {
+            throw new Exception("Keine Adresse gefunden");
+        }
+        $id = $this->createlieferantengutschrift($lieferscheindata['adresse']);
+
+        if (empty($id)) {
+            throw new Exception("Lieferantengutschrift anlegen fehlgeschlagen");
+        }
+
+        $this->app->erp->BelegProtokoll("lieferschein",$lieferscheinid,"Lieferschein zu Lieferantengutschrift weitergeführt");
+        $this->app->erp->BelegFreigabe('lieferantengutschrift',$id); 
+        $this->app->erp->BelegProtokoll("lieferantengutschrift",$id,"Lieferantengutschrift aus Lieferschein ".$lieferscheindata['belegnr']." erstellt");
+
+        $kontorahmen_adresse = $this->app->DB->Select("SELECT k.id FROM adresse a INNER JOIN kontorahmen k ON a.kontorahmen WHERE a.id = ".$adresse);           
+
+        $lieferscheinpositionen = $this->app->DB->SelectArr("SELECT * FROM lieferschein_position WHERE lieferschein = ".$lieferscheinid);
+        
+        foreach ($lieferscheinpositionen as $position) {            
+
+            $kontorahmen = $position['kontorahmen'];
+            $einartikel = $position['artikel'];
+            $menge = $position['menge'];
+            $preis = $this->app->erp->GetEinkaufspreis($einartikel,$menge,$adresse);
+
+            $umsatzsteuer = $this->app->DB->Select("SELECT umsatzsteuer FROM artikel WHERE id = ".$einartikel);
+            $steuersatz = $this->get_steuersatz($umsatzsteuer,$id);
+
+            if (empty($kontorahmen_adresse)) {
+                $kontorahmen = $this->app->DB->Select("SELECT kontorahmen FROM artikel a WHERE a.id = ".$einartikel);
+            } else {
+                $kontorahmen = $kontorahmen_adresse;
+            }
+          
+            $sql = "INSERT INTO lieferantengutschrift_position (lieferantengutschrift, menge, preis, steuersatz, artikel, kontorahmen) VALUES ($id, $menge, '$preis', '$steuersatz', $einartikel, '$kontorahmen')";
+            $this->app->DB->Insert($sql);
+        }
+
+        $check = $this->check_positions($id, 0);
+        $this->app->DB->Update("UPDATE lieferantengutschrift SET betrag = ".$check['betrag_brutto']." WHERE id = ".$id);
+        $this->app->Location->execute('index.php?module=lieferantengutschrift&action=edit&id='.$id);
     }
 
 }

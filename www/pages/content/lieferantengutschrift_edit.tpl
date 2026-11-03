@@ -20,9 +20,14 @@
 	                        				<fieldset style="float: left;">
                                                 <legend>{|<b>Lieferantengutschrift <font color="blue">[BELEGNR]</font></b> Lf-Nr. <a href="index.php?module=adresse&action=edit&id=[ADRESSE_ID]">[LIEFERANTENNUMMER]|}</a></legend>                              
                                                 [STATUSICONS]    
-                                            </fieldset>      
+                                            </fieldset>
 	                        				<fieldset style="float: right;">
-                                                <button name="submit" value="speichern" class="ui-button-icon" style="width:100%;">Speichern</button>
+                                                <table>
+                                                    <tr>
+                                                        <td>[PDFLINK]</td>
+                                                        <td><button name="submit" value="speichern" class="ui-button-icon" style="width:100%;">Speichern</button></td>
+                                                    </tr>
+                                                </table>
                                             </fieldset>
                                         </div>
                                		</div>                                    
@@ -52,10 +57,18 @@
                                                     </tr>
                                                     <tr>
                                                         <td>
+                                                            {|Belastungsanzeige|}:
+                                                        </td>
+                                                        <td>
+                                                            <input type="checkbox" id="belastungsanzeige" name="belastungsanzeige" value="1" [BELASTUNGSANZEIGECHECKED] size="20">
+                                                        </td>
+                                                    </tr>     
+                                                    <tr>
+                                                        <td>
                                                             {|Lieferantengutschrifts-Nr.|}:
                                                         </td>
                                                         <td>
-                                                            <input type="text" name="rechnung" id="rechnung" value="[RECHNUNG]" size="20" [SAVEDISABLED] required>
+                                                            <input type="text" name="rechnung" id="rechnung" value="[RECHNUNG]" size="20" [SAVEDISABLED]>
                                                         </td>
                                                     </tr>     
                                                     <tr>

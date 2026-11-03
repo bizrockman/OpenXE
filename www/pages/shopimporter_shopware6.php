@@ -955,7 +955,7 @@ class Shopimporter_Shopware6 extends ShopimporterBase
         if ($this->protocol) {
             if ($dump !== null && !is_array($dump))
                 $dump = ['dump' => $dump];
-            $this->app->Container->get('Logger')->info($message, $dump);
+            $this->app->Container->get('Logger')->info($message, $dump ?? []);
         }
     }
 
@@ -1474,6 +1474,9 @@ class Shopimporter_Shopware6 extends ShopimporterBase
         $mediaFolderId = $mediaFolderData['data'][0]['id'];
 
         foreach ($internalArticleData['Dateien'] as $internalFile) {
+            if ($internalFile['stichwort'] != 'Shopbild') {
+                continue;
+            }
             $filename = explode('.', $internalFile['filename']);
             unset($filename[(!empty($filename) ? count($filename) : 0) - 1]);
             $filename = $internalFile['id'] . '_' . implode($filename);
@@ -1536,7 +1539,7 @@ class Shopimporter_Shopware6 extends ShopimporterBase
                 'Authorization:Bearer ' . $accessToken['token'],
             ];
             curl_setopt($ch, CURLOPT_URL, $url);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, base64_decode($internalFile['datei']));
+            curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents($internalFile['dateipfad']));
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
             curl_setopt($ch, CURLOPT_HTTPHEADER, $setHeaders);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);

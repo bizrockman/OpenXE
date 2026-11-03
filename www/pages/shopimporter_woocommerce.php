@@ -1,13 +1,13 @@
 <?php
 /*
  **** COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
- * 
+ *
  * Xentral (c) Xentral ERP Sorftware GmbH, Fuggerstrasse 11, D-86150 Augsburg, * Germany 2019
  *
- * This file is licensed under the Embedded Projects General Public License *Version 3.1. 
+ * This file is licensed under the Embedded Projects General Public License *Version 3.1.
  *
- * You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis 
- * to obtain the text of the corresponding license version.  
+ * You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis
+ * to obtain the text of the corresponding license version.
  *
  **** END OF COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
  */
@@ -27,10 +27,12 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   public $shopid;
   public $data;
 
+  const TIMEOUT = 30;
+
   /**
    * @var $client WCClient $client
    */
-  public $client;
+  public WCClient $client;
   public $url;
 
   /** These variables hold the status strings WooCommerce is using to represent
@@ -57,8 +59,18 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   protected $app;
   protected $dump;
 
-  /** @var Logger $logger */
+  /*
+   * Variables for wordpress API
+   */
+  private $ImportWordpressUserName;
+  private $ImportWordpressApplicationPassword;
+  private $wordpress_api_path = "wp-json/wp/v2/";
+  private $dateienuebertragen;
+
+/** @var Logger $logger */
   public $logger;
+
+  public $backorders_array = array("no","notify","yes");
 
   public function __construct($app, $intern = false)
   {
@@ -501,7 +513,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $tmp = $this->CatchRemoteCommand('data');
     $anzahl = 0;
     $ctmp = (!empty($tmp) ? count($tmp) : 0);
-
+    $this->logger->debug("WooCommerce ImportSendListLager ".$ctmp." entries");
     for ($i = 0; $i < $ctmp; $i++) {
       // Get important values from input data
       $artikel = $tmp[$i]['artikel'];
@@ -536,8 +548,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
 
       if (empty($remoteIdInformation['id'])) {
         // The online shop doesnt know this article, write to log and continue with next product
-
-        $this->logger->error("WooCommerce Artikel $nummer wurde im Online-Shop nicht gefunden! Falsche Artikelnummer im Shop hinterlegt?");
+        $this->logger->error("WooCommerce Lagerzahlen Artikel $nummer wurde im Online-Shop nicht gefunden");
         continue;
       }
 
@@ -554,7 +565,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         $result = $this->client->put('products/' . $remoteIdInformation['id'], $updateProductParams);
       }
 
-      $this->logger->error(
+      $this->logger->info(
         "WooCommerce Lagerzahlenübertragung für Artikel: $nummer / $remoteIdInformation[id] - Anzahl: $lageranzahl",
         [
           'result' => $result
@@ -583,9 +594,89 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $tmp = $this->catchRemoteCommand('data');
     $anzahl = 0;
     $return = [];
-    for ($i = 0; $i < (!empty($tmp) ? count($tmp) : 0); $i++) {
+    $ctmp = (!empty($tmp) ? count($tmp) : 0);
+    $this->logger->debug("WooCommerce ImportSendList ".$ctmp." entries");
+
+    // Prepare files
+    $alle_dateien = array(); // pfad, dateiname
+    if ($this->dateienuebertragen) {
+        for ($i = 0; $i < $ctmp; $i++) {
+            $dateien_artikel = array();
+            if (isset($tmp[$i]['Dateien'])) {
+                // apply naming
+                foreach ($tmp[$i]['Dateien'] as $key => $datei) {
+                    if (!empty($this->filenamesmarty)) {
+                        $smarty = new Smarty;
+                        $directory = $this->app->erp->GetTMP().'/smarty/templates';
+                        $smarty->setCompileDir($directory);
+                        $dateidata = $datei;
+                        $dateidata['dateiname'] = pathinfo($dateidata['filename'] , PATHINFO_FILENAME);
+                        $dateidata['endung'] = pathinfo($dateidata['filename'], PATHINFO_EXTENSION);
+                        $dateidata['artikel'] = (object) $datei['artikeldata'];
+                        $smarty->assign('artikel', (object) $tmp[$i]);
+                        $smarty->assign('datei', (object) $dateidata);
+                        $transformed = $smarty->fetch('string:'.$this->filenamesmarty);
+                        if (!empty($transformed)) {
+                            $basename = pathinfo($transformed, PATHINFO_FILENAME);
+                            $ext = pathinfo($transformed, PATHINFO_EXTENSION);
+                            if (empty($ext)) {
+                                $ext = $datei['dateiendung'];
+                            }
+                            $datei['filename'] = $basename.".".$ext;
+                        }
+                    }
+                    // Ensure unique names
+                    if (in_array($datei['filename'],array_column($dateien_artikel,'filename'))) {
+                        $filecount = 0;
+                        $base = pathinfo($datei['filename'], PATHINFO_FILENAME);
+                        $extension = pathinfo($datei['filename'], PATHINFO_EXTENSION);
+                        do {
+                            $filecount++;
+                            $filename = $base.$this->fileunique.$filecount.'.'.$extension;
+                        } while (in_array($filename,array_column($dateien_artikel,'filename')));
+                        $datei['filename'] = $filename;
+                    }
+                    unset($datei['artikeldata']);
+                    $dateien_artikel[] = $datei;
+                }
+                $alle_dateien = array_merge($alle_dateien,$dateien_artikel);
+            }
+        } // Artikel loop files
+
+        // Each filename only once
+        $unique_filename = array_unique(array_column($alle_dateien, 'filename'));
+        $alle_dateien = array_intersect_key($alle_dateien, $unique_filename);
+        $this->logger->debug("WooCommerce ImportSendList ".count($alle_dateien)." files", $alle_dateien);
+
+        // Upload all the files and save wordpress id
+        $uploaded_files = $this->uploadFiles($alle_dateien);
+        if ($uploaded_files['success']) {
+            $this->logger->debug("WooCommerce ImportSendList uploaded " .count($uploaded_files['files'])." files", $uploaded_files);
+        } else {
+            $this->logger->error("WooCommerce ImportSendList failed", $uploaded_files);
+            throw new Exception("WooCommerce ImportSendList upload failed"); // For now, better to fail only the affected articles
+        }
+    }
+    // Files
+
+    for ($i = 0; $i < $ctmp; $i++) {
       $return[$i] = new ArticleExportResult();
+      $return[$i]->success = true;
       $artikel = $tmp[$i]['artikel'];
+
+        if (!empty($this->productsmarty)) {
+            $smarty = new Smarty;
+            $directory = $this->app->erp->GetTMP().'/smarty/templates';
+            $smarty->setCompileDir($directory);
+            $smarty->assign('artikel', (object) $tmp[$i]);
+            $smarty_array = json_decode($this->productsmarty, true);
+            if (empty($smarty_array)) {
+                throw new Exception("Smarty template JSON decode error! ".print_r(json_last_error_msg(),true));
+            }
+            $transformed = json_decode($smarty->fetch('string:'.$this->productsmarty),true);
+            $tmp[$i] = array_merge((array) $tmp[$i], $transformed);
+        }
+
       $return[$i]->articleId = intval($artikel);
       $nummer = $tmp[$i]['nummer'];
       if (!empty($tmp[$i]['artikelnummer_fremdnummern'][0]['nummer'])) {
@@ -598,8 +689,11 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       $hersteller = $tmp[$i]['hersteller'];
       $herstellerlink = $tmp[$i]['herstellerlink'];
 
-      $name_de = $tmp[$i]['name_de'];
-      $name_en = $tmp[$i]['name_en'];
+      $name_de = html_entity_decode($tmp[$i]['name_de']);
+      $name_en = html_entity_decode($tmp[$i]['name_en']);
+
+//        print_r($tmp[$i]); exit();
+
       $description = html_entity_decode($tmp[$i]['uebersicht_de']);
       $description_en = html_entity_decode($tmp[$i]['uebersicht_en']);
       $preis = $tmp[$i]['preis'];
@@ -628,7 +722,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       $meta_desc = $tmp[$i]['metadescription_de'];
       $meta_title = $tmp[$i]['metatitle_de'];
 
-      $pseudopreis = $tmp[$i]['pseudopreis'];//*1.19;
+      $pseudopreis = $tmp[$i]['pseudopreis'];// *1.19;
       if ($pseudopreis <= $preis)
         $pseudopreis = $preis;
       $steuersatz = $tmp[$i]['steuersatz'];
@@ -667,6 +761,9 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         ['key' => '_yoast_wpseo_title', 'value' => $meta_title],
       ];
 
+        foreach ($tmp[$i]['meta_data'] as $key => $value) {
+            $commonMetaData[] = ['key' => $this->metadataprefix.$key, 'value' => $value];
+        }
 
       // Attributes that are used for both updating an existing product as well as creating a new one
       $commonProductAtts = [
@@ -682,6 +779,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
           'width' => $dim_width,
           'height' => $dim_height
         ],
+        'global_unique_id' => $tmp[$i]['ean'],
         'meta_data' => $commonMetaData,
       ];
 
@@ -696,12 +794,50 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         $commonProductAtts['manage_stock'] = true;
       }
 
+      $commonProductAtts['backorders'] = $this->backorders_array[$this->backorders];
+
       if ($lageranzahl !== '') {
         $commonProductAtts['stock_quantity'] = (int) $lageranzahl;
       }
 
+      if (isset($tmp[$i]['Dateien'])) {
+        if (!empty($uploaded_files['files'])) {
+            $attachments = array();
+
+            foreach ($tmp[$i]['Dateien'] as $datei) {
+                // find file in uploaded_files
+                $key = array_search($datei['dateipfad'], array_column($uploaded_files['files'], 'dateipfad'));
+                if ($key !== false) {
+                    $uploaded_file = $uploaded_files['files'][$key];
+                    if ($uploaded_file['type'] == 'shopbild') {
+                        $commonProductAtts['images'][] = [
+                            'id' => $uploaded_file['wordpressid']
+                        ];
+                    }
+                    else if (in_array(strtolower($uploaded_file['type']),$this->dateienuebertragen)) {
+                        $attachments[] = array('name' => $uploaded_file['name'], 'wp_media_id' => $uploaded_file['wordpressid'], 'typ' => $uploaded_file['type']);
+                    }
+                } else {
+                    $return[$i]->message .= "Datei wurde nicht exportiert: ".$datei['filename'];
+                }
+            }
+
+            array_multisort(
+                array_column($attachments, 'name'),
+                SORT_ASC,
+                SORT_NATURAL,
+                $attachments
+            );
+
+            if (!empty($attachments)) {
+                $commonProductAtts['meta_data'][] = array('key' => 'openxe_product_attachments', 'value' => $attachments);
+            }
+        }
+      }
+
       if (!is_null($product_id)) {
         // Product exists - check if it's a variation or regular product
+        $this->logger->debug("WooCommerce ImportSendList update product");
         if ($isVariant && !empty($parent_id)) {
           // This is a VARIATION - use the variations endpoint
           // Variations don't support certain attributes (they inherit from parent)
@@ -723,110 +859,105 @@ class Shopimporter_Woocommerce extends ShopimporterBase
 
           $this->client->put('products/' . $parent_id . '/variations/' . $product_id, $variationAtts);
 
-          $this->logger->info("WooCommerce Variante geändert für Artikel: $nummer / Variation: $product_id (Parent: $parent_id)");
+          $this->logger->info("WooCommerce Variante geändert für Artikel: $nummer / Variation: $product_id (Parent: $parent_id), noch ".($ctmp - $i -1 )." Artikel");
         } else {
           // This is a regular product
           $this->client->put('products/' . $product_id, array_merge([
 
           ], $commonProductAtts));
 
-          $this->logger->info("WooCommerce Artikel geändert für Artikel: $nummer / $product_id");
+          $this->logger->info("WooCommerce Artikel geändert für Artikel: $nummer / $product_id, noch ".($ctmp - $i -1 )." Artikel");
         }
       } else {
         // create a new product
+        $this->logger->debug("WooCommerce ImportSendList create product");
         $product_id = $this->client->post('products/', array_merge([
           'sku' => $nummer,
         ], $commonProductAtts))->id;
-        $this->logger->info("WooCommerce neuer Artikel angelegt: $nummer");
+        $this->logger->info("WooCommerce neuer Artikel angelegt: $nummer, noch ".($ctmp - $i - 1)." Artikel");
       }
 
-      // TODO: Kategoriebaum und Bilder werden noch nicht uebertragen
+      // TODO: Kategoriebaum wird noch nicht uebertragen
 
       // if(isset($tmp[$i]['kompletter_kategorienbaum'])){
       //   $baum = $tmp[$i]['kompletter_kategorienbaum'];
       //   $this->updateKategorieBaum($baum);
       // }
 
-      // if(isset($tmp[$i]['Dateien'])){
-      //   $dateien = $tmp[$i]['Dateien'];
-      //   $this->save_images($dateien, $product_id);
-      // }
-
       // Update the associated product categories
 
-      $chosenCats = array();
-      if (isset($tmp[$i]['kategorien']) || isset($tmp[$i]['kategoriename'])) {
-        $kategorien = $tmp[$i]['kategorien'];
-        if (!($kategorien) && !self::emptyString($tmp[$i]['kategoriename'])) {
-          $kategorien = array(
-            array(
-              'name' => $tmp[$i]['kategoriename'],
-            )
-          );
-        }
-        if ((!empty($kategorien) ? count($kategorien) : 0) > 0) {
-          // Retrive all WC categories via API
-          $allWooCommerceCategories = $this->client->get('products/categories', ['per_page' => '100']);
-
-          $searchWpCategories = [];
-          foreach ($allWooCommerceCategories as $a) {
-            $searchWpCategories[$a->id] = $a->name;
-          }
-          // searchWPCategories is an assoc array of type WCCatId(Int) -> WCCatName(string)
-
-          // Iterate over the categories that are choosen in xentral
-          foreach ($kategorien as $k => $v) {
-            $wawi_cat_name = $v['name'];
-
-            $wcCatId = null;
-
-            // If WC has a matching category. We match based on name!
-            if (array_search($wawi_cat_name, array_values($searchWpCategories)) !== false) {
-              // get  id of that WC Category
-              $wcCatId = array_search($wawi_cat_name, $searchWpCategories);
-
-            } else {
-              // No matching category exists
-              $wcCatId = $this->client->post('products/categories', [
-                'name' => $wawi_cat_name,
-              ])->id;
-
+      if ($this->kategorienuebertragen) {
+          $chosenCats = array();
+          if (isset($tmp[$i]['kategorien']) || isset($tmp[$i]['kategoriename'])) {
+            $kategorien = $tmp[$i]['kategorien'];
+            if (!($kategorien) && !self::emptyString($tmp[$i]['kategoriename'])) {
+              $kategorien = array(
+                array(
+                  'name' => $tmp[$i]['kategoriename'],
+                )
+              );
             }
+            if ((!empty($kategorien) ? count($kategorien) : 0) > 0) {
+              // Retrive all WC categories via API
+              $allWooCommerceCategories = $this->client->get('products/categories', ['per_page' => '100']);
 
-            if ($wcCatId) {
-              // update category. We first retrieve the product and append the new product category, not replace the entire category array.
-              $alreadyAssignedWCCats = $this->client->get('products/' . $product_id, [
-                'per_page' => 1,
-              ])->categories;
-
-              // Get ids of existing categories
-              $existingCategoryIds = [];
-              foreach ($alreadyAssignedWCCats as $cat) {
-                $existingCategoryIds[] = $cat->id;
+              $searchWpCategories = [];
+              foreach ($allWooCommerceCategories as $a) {
+                $searchWpCategories[$a->id] = $a->name;
               }
+              // searchWPCategories is an assoc array of type WCCatId(Int) -> WCCatName(string)
 
-              $allCatIds = array_merge($existingCategoryIds, array($wcCatId));
+              // Iterate over the categories that are choosen in xentral
+              foreach ($kategorien as $k => $v) {
+                $wawi_cat_name = $v['name'];
 
-              // prepare data to be in correct format for WC api. should be individual items with key 'id' and id as value
-              $allCatIdsWCAPIRep = array();
-              foreach ($allCatIds as $id) {
-                $allCatIdsWCAPIRep[] = ['id' => $id];
+                $wcCatId = null;
+
+                // If WC has a matching category. We match based on name!
+                if (array_search($wawi_cat_name, array_values($searchWpCategories)) !== false) {
+                  // get  id of that WC Category
+                  $wcCatId = array_search($wawi_cat_name, $searchWpCategories);
+
+                } else {
+                  // No matching category exists
+                  $wcCatId = $this->client->post('products/categories', [
+                    'name' => $wawi_cat_name,
+                  ])->id;
+
+                }
+
+                if ($wcCatId) {
+                  // update category. We first retrieve the product and append the new product category, not replace the entire category array.
+                  $alreadyAssignedWCCats = $this->client->get('products/' . $product_id, [
+                    'per_page' => 1,
+                  ])->categories;
+
+                  // Get ids of existing categories
+                  $existingCategoryIds = [];
+                  foreach ($alreadyAssignedWCCats as $cat) {
+                    $existingCategoryIds[] = $cat->id;
+                  }
+
+                  $allCatIds = array_merge($existingCategoryIds, array($wcCatId));
+
+                  // prepare data to be in correct format for WC api. should be individual items with key 'id' and id as value
+                  $allCatIdsWCAPIRep = array();
+                  foreach ($allCatIds as $id) {
+                    $allCatIdsWCAPIRep[] = ['id' => $id];
+                  }
+
+                  // Update category assignment
+                  $this->client->put('products/' . $product_id, [
+                    'categories' => $allCatIdsWCAPIRep,
+                  ]);
+
+                  $chosenCats[] = $wcCatId;
+                }
               }
-
-              // Update category assignment
-              $this->client->put('products/' . $product_id, [
-                'categories' => $allCatIdsWCAPIRep,
-              ]);
-
-              $chosenCats[] = $wcCatId;
             }
-          }
-        }
+        } // kategorienuebertragen
       }
-
-      $return[$i]->success = true;
     }
-
     return $return;
     // return array($product_id,$anzahl,$nummer,$steuersatz, $preis);
   }
@@ -840,10 +971,17 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   {
     try {
       $orders = $this->client->get('orders', ['per_page' => '1']);
-      return 'success';
     } catch (Exception $e) {
       return 'failed: Keine Verbindung zur API - ' . $e->getMessage();
     }
+
+    if (!empty($this->ImportWordpressUserName)) {
+        $result = $this->wordpress_request('users/me', debug: true, ssl_ignore: true);
+        if ($result['status'] != 1) {
+            return 'failed: Verbindung zur Wordpress API '.$result['message'];
+        }
+    }
+    return 'success';
   }
 
   /**
@@ -872,11 +1010,29 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $ImportWooCommerceApiKey = $felder['ImportWoocommerceApiKey'] ?? '';
     $ImportWooCommerceApiUrl = $felder['ImportWoocommerceApiUrl'] ?? '';
 
+    $this->ImportWordpressUserName = $felder['ImportWordpressUserName'];
+    $this->ImportWordpressApplicationPassword = $felder['ImportWordpressApplicationPassword'];
+
+    $this->filenamesmarty = $felder['filenamesmarty'];
+    $this->productsmarty = $felder['productsmarty'];
+    $this->fileunique = $felder['fileunique'];
+    $this->metadataprefix = $felder['metadataprefix'];
+
+    $shopexportArr =  $this->app->DB->SelectRow("SELECT * FROM shopexport WHERE id = '$this->shopid' LIMIT 1");
+
+    $dateienuebertragen = $shopexportArr['dateienuebertragen'];
+    $this->kategorienuebertragen = $shopexportArr['kategorienuebertragen'];
+
+    $this->dateienuebertragen = explode(',',str_replace(' ','',strtolower($dateienuebertragen)));
+
     $this->statusPending = $felder['statusPending'] ?? 'pending';
     $this->statusProcessing = $felder['statusProcessing'] ?? 'processing';
     $this->statusCompleted = $felder['statusCompleted'] ?? 'completed';
+    $this->timeout = (int) $felder['timeout'] ?? SELF::TIMEOUT;
 
     $this->priceType = $felder['priceType'] ?? null;
+
+    $this->backorders = $felder['backorders'];
 
     $this->url = $ImportWooCommerceApiUrl;
     $this->client = new WCClient(
@@ -886,7 +1042,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       $ImportWooCommerceApiKey,
       //WooCommerce API Secret
       $ImportWooCommerceApiSecret,
-      ["query_string_auth" => true],
+      ["query_string_auth" => true, 'timeout' => $this->timeout],
       $this->logger,
       $this->ssl_ignore
     );
@@ -1035,15 +1191,38 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         'ausblenden' => array('abholmodus' => array('zeitbereich')),
         'archiv' => array('ab_nummer'),
         'felder' => array(
-          //          'protokoll'=>array('typ'=>'checkbox','bezeichnung'=>'Protokollierung im Logfile:'),
-          'ssl_ignore' => array('typ' => 'checkbox', 'bezeichnung' => 'SSL-Prüfung abschalten:', 'info' => 'Nur für Testzwecke!'),
-          'ImportWoocommerceApiKey' => array('typ' => 'text', 'bezeichnung' => '{|API Key:', 'size' => 60),
-          'ImportWoocommerceApiSecret' => array('typ' => 'text', 'bezeichnung' => '{|API Secret|}:', 'size' => 60),
-          'ImportWoocommerceApiUrl' => array('typ' => 'text', 'bezeichnung' => '{|API Url|}:', 'size' => 40),
-          'statusPending' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung offen|}:', 'size' => 40, 'default' => 'pending', 'info' => '({|ggfs. getrennt durch ";": pending;on-hold|})'),
-          'statusProcessing' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung in Bearbeitung|}:', 'size' => 10, 'default' => 'processing'),
-          'statusCompleted' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung fertig|}:', 'size' => 10, 'default' => 'completed'),
-          'priceType' => array('typ' => 'select', 'bezeichnung' => '{|Preisberechnungsgrundlage bei Auftragsimport|}', 'optionen' => array('netcalculated' => '{|Nettopreis zurückrechnen (Standard)|}', 'grosscalculated' => '{|Bruttopreis zurückrechnen|}')),
+        //          'protokoll'=>array('typ'=>'checkbox','bezeichnung'=>'Protokollierung im Logfile:'),
+        'ssl_ignore' => array('typ' => 'checkbox', 'bezeichnung' => 'SSL-Prüfung abschalten:', 'info' => 'Nur für Testzwecke!'),
+        'ImportWoocommerceApiKey' => array('typ' => 'text', 'bezeichnung' => '{|API Key:', 'size' => 60),
+        'ImportWoocommerceApiSecret' => array('typ' => 'text', 'bezeichnung' => '{|API Secret|}:', 'size' => 60),
+        'ImportWoocommerceApiUrl' => array('typ' => 'text', 'bezeichnung' => '{|API Url|}:', 'size' => 40),
+        'ImportWordpressUserName' => array('typ' => 'text', 'bezeichnung' => '{|Wordpress Benutzername:', 'size' => 60, 'info' => 'Für Dateiuploads'),
+        'ImportWordpressApplicationPassword' => array('typ' => 'text', 'bezeichnung' => '{|Wordpress Anwendungspasswort:', 'size' => 60, 'info' => 'Für Dateiuploads'),
+        'statusPending' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung offen|}:', 'size' => 40, 'default' => 'pending', 'info' => '({|ggfs. getrennt durch ";": pending;on-hold|})'),
+        'statusProcessing' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung in Bearbeitung|}:', 'size' => 10, 'default' => 'processing'),
+        'statusCompleted' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung fertig|}:', 'size' => 10, 'default' => 'completed'),
+        'priceType' => array('typ' => 'select', 'bezeichnung' => '{|Preisberechnungsgrundlage bei Auftragsimport|}', 'optionen' => array('netcalculated' => '{|Nettopreis zurückrechnen (Standard)|}', 'grosscalculated' => '{|Bruttopreis zurückrechnen|}')),
+        'timeout' => array('typ' => 'text', 'bezeichnung' => '{|Timeout in Sekunden|}:', 'size' => 40, 'default' => '30', 'info' => ''),
+        'backorders' => array('typ' => 'select', 'bezeichnung' => '{|Einstellungen für Backorders|}:', 'optionen' => $this->backorders_array, 'info' => ''),
+        'metadataprefix' => array('typ' => 'text', 'bezeichnung' => '{|Präfix für Metadaten|}:', 'size' => 40, 'default' => 'openxe_meta_', 'info' => ''),
+        'productsmarty' => [
+            'typ' => 'textarea',
+            'cols' => 80,
+            'rows' => 5,
+            'bezeichnung' => '{|Smarty-Template JSON|}:',
+            'info' => 'Beispiel:<br>{<br />&nbsp; &nbsp; "name_de": "{$artikel-&gt;name_en}",<br />&nbsp; &nbsp; "meta_data": {<br />&nbsp; &nbsp; &nbsp; &nbsp; "mpn": "{$artikel-&gt;herstellernummer}",<br />&nbsp; &nbsp; &nbsp; &nbsp; "manufacturer": "{$artikel-&gt;hersteller}"<br />&nbsp; &nbsp; }<br />}',
+            'size' => 120,
+        ],
+        'filenamesmarty' => [
+            'typ' => 'textarea',
+            'cols' => 80,
+            'rows' => 5,
+            'bezeichnung' => '{|Smarty-Template f&uuml;r Benennung der Dateien|}:',
+            'info' => 'Beispiel:{$artikel->hersteller}-{$artikel->herstellernummer}-{$artikel->stichwort}-{$datei->titel}.{$datei->endung}<br>Dateifelder: dateiname, endung, mimetype, titel, beschreibung, id, version, stichwort, extid',
+            'size' => 120,
+        ],
+        'fileunique' => array('typ' => 'text', 'bezeichnung' => '{|Trennzeichen für Mehrfachdateinamen|}:', 'size' => 11, 'default' => '-'),
+        'dateienuebertragen' => array('typ' => 'info', 'bezeichnung' => '{|Datei&uuml;bertragung|}', 'info' => 'Dateien werden &uuml;ber Wordpress API hochgeladen und im Produkt in den Metadaten als Array "product_attachments" mit Präfix (s.o.) hinterlegt. Diese k&ouml;nnen dann z.B. mit einem Snippet angezeigt werden. Felder: "typ", "wp_media_id", "name". Der URL kann mit wp_get_attachment_url($wp_media_id) ermittelt werden.'),
         )
       );
   }
@@ -1079,7 +1258,169 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     return (strlen(trim($string)) == 0);
   }
 
+  function wordpress_request(string $endpoint, $postdata = null, $method = null, $getdata = null, string $content_disposition = null, string $content_type = null, $debug = false, $debugurl = null, bool $ssl_ignore = false, int $timeout_seconds = 30) {
+    $ch = curl_init();
+    $url_addition = "";
+
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+    curl_setopt($ch, CURLOPT_USERPWD, $this->ImportWordpressUserName . ":" . $this->ImportWordpressApplicationPassword);
+
+    if (!empty($getdata)) {
+        $url_addition = "?";
+        $ampersand = "";
+        foreach ($getdata as $key => $value) {
+            $url_addition .= $ampersand . $key . "=" . $value;
+            $ampersand = "&";
+        }
+    }
+    if (!empty($postdata)) {
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $postdata);
+        $headers[] = 'Content-Type: ' . $content_type;
+        if (!empty($content_disposition)) {
+            $headers[] = 'Content-Disposition: '.$content_disposition;
+        }
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    }
+
+    if ($debugurl) {
+        $url = $debugurl;
+    } else {
+        $url = $this->shopUrl;
+    }
+
+    curl_setopt($ch, CURLOPT_URL, $url . $this->url. $this->wordpress_api_path . $endpoint . $url_addition);
+
+    curl_setopt($ch, CURLINFO_HEADER_OUT, true);
+    curl_setopt($ch, CURLOPT_VERBOSE, true);
+
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, !$ssl_ignore);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, !$ssl_ignore);
+
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeout_seconds);
+    curl_setopt($ch, CURLOPT_TIMEOUT, $timeout_seconds);
+
+    $response = curl_exec($ch);
+    if (curl_error($ch)) {
+        $this->error[] = curl_error($ch);
+    } else {
+        $response = json_decode($response, associative: true);
+    }
+    curl_close($ch);
+
+    $information = curl_getinfo($ch);
+
+    $result = [
+        'status' => ($information['http_code'] >= 200  && $information['http_code'] <= 299),
+        'response' => $response,
+        'message' => $response['message']
+    ];
+
+    if ($debug) {
+        $result['curl_getinfo'] = $information;
+        $result['curl_postdata_500_bytes'] = mb_substr($postdata,0,500);
+        $this->logger->debug(
+                'Woocommerce Wordpress debug',
+                $result
+        );
+    }
+
+    return $result;
+  }
+
+      /*
+     * Upload files to wordpress API
+     * Returns success, files (list of files with url)
+     */
+
+    function uploadFiles($dateien) {
+
+        $uploadFilesResult = array('success' => true, 'files' => array());
+
+        foreach ($dateien as $datei) {
+
+            $fileResult = [
+                            'success' => true,
+                            'name'=> $datei['filename'],
+                            'type' => strtolower($datei['stichwort']),
+                            'dateipfad' => $datei['dateipfad']
+                        ];
+
+            $postdata = file_get_contents($datei['dateipfad']);
+
+            $result = $this->wordpress_request(
+                    endpoint: 'media',
+                    getdata: [
+                        'search' => urlencode($datei['filename'])
+                    ],
+                    debug: true,
+                    ssl_ignore: true
+            );
+
+            if ($result['status'] == 1) {
+                $response = $result['response'];
+
+                $file_wordpress_id = $response[0]['id'];
+
+                if (is_numeric($file_wordpress_id)) { // File exists -> update
+                    $result = $this->wordpress_request(
+                            endpoint: 'media/' . $file_wordpress_id,
+                            postdata: $postdata,
+                            method: 'POST',
+                            content_disposition: 'attachment; filename="' . $datei['filename'] . '"',
+                            content_type: $datei['mimetype'] ?: 'application:octet-stream',
+                            debug: true,
+                            ssl_ignore: true
+                    );
+
+                    $response = $result['response'];
+
+                    if ($result['status'] != 1 || $response['id'] != $file_wordpress_id) {
+                        $uploadFilesResult['success'] = false;
+                        $fileResult['success'] = false;
+                        $fileResult['status'] = 'file update failed';
+                    } else {
+                        $fileResult['status'] = 'updated';
+                        $fileResult['wordpressid'] = $response['id'];
+                        $fileResult['url'] = $response['guid']['rendered'];
+                    }
+                } else { // New file
+                    $result = $this->wordpress_request(
+                            endpoint: 'media',
+                            postdata: $postdata,
+                            method: 'POST',
+                            content_disposition: 'attachment; filename="' . $datei['filename'] . '"',
+                            content_type: $datei['mimetype'] ?: 'application:octet-stream',
+                            debug: true,
+                            ssl_ignore: true
+                    );
+                    if ($result['http_code'] >= 200 && $result['http_code'] <= 299) {
+                        $fileResult['status'] = 'created';
+                        $fileResult['wordpressid'] = $response['id'];
+                        $fileResult['url'] = $response['guid']['rendered'];
+                    } else {
+                        $uploadFilesResult['success'] = false;
+                        $fileResult['success'] = false;
+                        $fileResult['status'] = 'file creation failed'.($result['http_code']?(" http code".$result['http_code']):'');
+                    }
+                }
+            } else {
+                $uploadFilesResult['success'] = false;
+                $fileResult['success'] = false;
+                $fileResult['status'] = 'media search failed';
+            }
+            $uploadFilesResult['files'][] = $fileResult;
+        }
+        $this->logger->debug(
+                'WooCommerce upload files',
+                $uploadFilesResult
+        );
+
+        return($uploadFilesResult);
+    }
 }
+
 
 class WCClient
 {
@@ -2183,10 +2524,40 @@ class WCHttpClient
       return strlen($headers);
     });
 
+    $this->curl_debug = true;
+    if ($this->curl_debug) {
+        // Verbose debugging
+        ob_start();
+        $out = fopen('php://output', 'w');
+        curl_setopt($this->ch, CURLOPT_VERBOSE, true);
+        curl_setopt($this->ch, CURLOPT_STDERR, $out);
+        // Verbose debugging
+    }
+
     // Get response data.
     $body = curl_exec($this->ch);
     $code = curl_getinfo($this->ch, CURLINFO_HTTP_CODE);
     $headers = $this->getResponseHeaders();
+
+    if ($this->curl_debug) {
+        // Verbose debugging
+        fclose($out);
+        $debug = ob_get_clean();
+        $result['postdata_500_bytes'] = mb_substr($postdata,0,500);
+        $result['debug'] = $debug;
+        $curlinfo = curl_getinfo($this->ch);
+        // Verbose debugging
+
+        $this->logger->debug(
+        'WooCommerce debug',
+        [
+          'request' => $this->request,
+          'response' => $this->response,
+          'curlinfo' => $curlinfo,
+          'result' => $result
+        ]
+      );
+    }
 
     // Register response.
     $this->response = new WCResponse($code, $headers, $body);

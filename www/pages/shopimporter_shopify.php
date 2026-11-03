@@ -1099,10 +1099,13 @@ class Shopimporter_Shopify extends ShopimporterBase
         if($shopbilderuebertragen && isset($tmp[$i]['Dateien'])){
           $altebilder = $this->adapter->call("products/$productid/images.json");
           foreach ($altebilder['data']['images'] as $key => $value) {
+            if ($value['stichwort'] != 'Shopbild') {
+                continue;
+            }
             $this->adapter->call("products/$productid/images/".$value['id'].'.json', 'DELETE');
           }
           foreach ($tmp[$i]['Dateien'] as $key => $value) {
-            $this->adapter->call("products/$productid/images.json", 'POST',array('image' => array('attachment' => $value['datei'], 'filename' => $value['filename'])));
+            $this->adapter->call("products/$productid/images.json", 'POST',array('image' => array('attachment' => base64_encode(file_get_contents($value['dateipfad'])) , 'filename' => $value['filename'])));
           }
         }
       }
@@ -3691,7 +3694,7 @@ class Shopimporter_Shopify extends ShopimporterBase
     if($this->logging){
         if ($dump !== null && !is_array($dump))
             $dump = ['dump' => $dump];
-        $this->app->Container->get('Logger')->info($nachricht, $dump);
+        $this->app->Container->get('Logger')->info($nachricht, $dump ?? []);
     }
   }
 

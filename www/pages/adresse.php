@@ -5157,12 +5157,14 @@ function AdresseBelege()
   $von = $this->app->User->GetParameter("adresse_belege_von");
   $bis = $this->app->User->GetParameter("adresse_belege_bis");
 
+    echo("cmd $cmd");
+
   if($cmd == 'kundensaldodatumsrelevant'){
     $von = $this->app->Secure->GetGET("von");
     $bis = $this->app->Secure->GetGET("bis");
   }
 
-if (!is_null($von) && !is_null($bis)) 
+if (!empty($von) && !empty($bis))
 {
 	$von = date_format(date_create_from_format('d.m.Y', $von), 'Y-m-d');
 	$bis = date_format(date_create_from_format('d.m.Y', $bis), 'Y-m-d');

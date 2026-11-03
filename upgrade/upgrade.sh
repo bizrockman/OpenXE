@@ -7,7 +7,6 @@ echo_user() {
 
 while :
 do
-    clear
     echo "--------------- OpenXE manual upgrade ---------------"
     echo -e "Choose user:"
     echo -e "1) autodect user                           "
@@ -46,7 +45,6 @@ do
         exit 0
         ;;
         *)
-        clear
         ;;
     esac
 done

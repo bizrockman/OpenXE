@@ -673,7 +673,6 @@ class Rechnung extends GenRechnung
 
     $this->app->Tpl->Set('ZAHLWEISE',ucfirst($auftragArr[0]['zahlungsweise']));
     $this->app->Tpl->Set('STATUS',($auftragArr[0]['status'] === 'storniert' && $auftragArr[0]['teilstorno'] == 1?'teilstorniert':$auftragArr[0]['status']));
-    $this->app->Tpl->Set('IHREBESTELLNUMMER',$auftragArr[0]['ihrebestellnummer']);
 
     $this->app->Tpl->Set('DEBITORENNUMMER', $auftragArr[0]['kundennummer_buchhaltung']);
 
@@ -693,10 +692,25 @@ class Rechnung extends GenRechnung
       $this->app->Tpl->Set('DEBITORENNUMMER', $auftragArr[0]['kundennummer_buchhaltung']);
     }
 
-    $internet = $this->app->DB->Select("SELECT a.internet FROM rechnung r LEFT JOIN auftrag a ON a.id=r.auftragid WHERE r.id='$id' AND r.id > 0 LIMIT 1");
-    $this->app->Tpl->Set('INTERNET',$internet);
-    
+//    $internet = $this->app->DB->Select("SELECT a.internet FROM rechnung r LEFT JOIN auftrag a ON a.id=r.auftragid WHERE r.id='$id' AND r.id > 0 LIMIT 1");
+    //$this->app->Tpl->Set('INTERNET',$internet);
 
+    $auftraginfo = $this->app->DB->SelectRow("
+        SELECT 
+            a.id,
+            a.internet,
+            a.belegnr,
+            a.ihrebestellnummer,
+            se.bezeichnung AS shopname
+        FROM rechnung r
+        LEFT JOIN auftrag a ON a.id=r.auftragid
+        LEFT JOIN shopexport se ON se.id=a.shop
+        WHERE r.id='$id' AND r.id > 0 LIMIT 1"
+    );
+    $this->app->Tpl->Set('INTERNET',$auftraginfo['internet']);
+    $this->app->Tpl->Set('ONLINESHOP',$auftraginfo['shopname']);
+    $this->app->Tpl->Set('IHREBESTELLNUMMER',$auftraginfo['ihrebestellnummer']);
+   
     $this->app->Tpl->Set('MAHNWESENDATUM',$this->app->String->Convert($auftragArr[0]['mahnwesen_datum'],"%1-%2-%3","%3.%2.%1"));
 
     $ab_datum = $this->app->String->Convert($auftragArr[0]['datum'],"%1-%2-%3","%3.%2.%1");
@@ -707,11 +721,7 @@ class Rechnung extends GenRechnung
 
     if($auftragArr[0]['auftragid'] > 0)
     {
-      $this->app->Tpl->Set('AUFTRAG',"<a href=\"index.php?module=auftrag&action=edit&id=".$auftragArr[0]['auftragid']."\" target=\"_blank\" title=\"$ab_datum\">".$auftragArr[0]['auftrag']."</a>&nbsp;
-          <a href=\"index.php?module=auftrag&action=pdf&id=".$auftragArr[0]['auftragid']."\" target=\"_blank\"><img src=\"./themes/new/images/pdf.svg\" title=\"Auftrag PDF\" border=\"0\"></a>&nbsp;
-          <a href=\"index.php?module=auftrag&action=edit&id=".$auftragArr[0]['auftragid']."\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Auftrag bearbeiten\" border=\"0\"></a>&nbsp;");
-    }else{
-      $this->app->Tpl->Set('AUFTRAG', '-');
+      $this->app->Tpl->Set('AUFTRAG',"<a href=\"index.php?module=auftrag&action=edit&id=".$auftragArr[0]['auftragid']."\" target=\"_blank\" title=\"$ab_datum\">".$auftragArr[0]['auftrag']."</a>&nbsp;<a href=\"index.php?module=auftrag&action=pdf&id=".$auftragArr[0]['auftragid']."\" target=\"_blank\"><img src=\"./themes/new/images/pdf.svg\" title=\"Auftrag PDF\" border=\"0\"></a>&nbsp;<a href=\"index.php?module=auftrag&action=edit&id=".$auftragArr[0]['auftragid']."\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Auftrag bearbeiten\" border=\"0\"></a>&nbsp;");
     }
     $auftraege = $this->app->DB->SelectArr("(SELECT a.belegnr, a.id FROM sammelrechnung_position s 
     INNER JOIN auftrag_position ap on ap.id = s.auftrag_position_id INNER JOIN auftrag a on a.id = ap.auftrag 
@@ -734,18 +744,14 @@ class Rechnung extends GenRechnung
           if(empty($v['belegnr'])) {
             $v['belegnr'] = 'ENTWURF';
           }
-          $this->app->Tpl->Add('AUFTRAG',"<a href=\"index.php?module=auftrag&action=edit&id=".$v['id']."\" target=\"_blank\">".$v['belegnr']."</a>&nbsp;
-          <a href=\"index.php?module=auftrag&action=pdf&id=".$v['id']."\" target=\"_blank\"><img src=\"./themes/new/images/pdf.svg\" title=\"Auftrag PDF\" border=\"0\"></a>&nbsp;
-          <a href=\"index.php?module=auftrag&action=edit&id=".$v['id']."\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Auftrag bearbeiten\" border=\"0\"></a>&nbsp;");
+          $this->app->Tpl->Add('AUFTRAG',"<a href=\"index.php?module=auftrag&action=edit&id=".$v['id']."\" target=\"_blank\">".$v['belegnr']."</a>&nbsp;<a href=\"index.php?module=auftrag&action=pdf&id=".$v['id']."\" target=\"_blank\"><img src=\"./themes/new/images/pdf.svg\" title=\"Auftrag PDF\" border=\"0\"></a>&nbsp;<a href=\"index.php?module=auftrag&action=edit&id=".$v['id']."\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Auftrag bearbeiten\" border=\"0\"></a>&nbsp;");
         }
         $first = false;
       }
     }
 
-
     $gutschrift = $this->app->DB->SelectArr("SELECT
-        CONCAT('<a href=\"index.php?module=gutschrift&action=edit&id=',g.id,'\" target=\"_blank\">',if(g.belegnr='0' OR g.belegnr='','ENTWURF',g.belegnr),'&nbsp;<a href=\"index.php?module=gutschrift&action=pdf&id=',g.id,'\"><img src=\"./themes/new/images/pdf.svg\" title=\"Gutschrift PDF\" border=\"0\"></a>&nbsp;
-          <a href=\"index.php?module=gutschrift&action=edit&id=',g.id,'\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Gutschrift bearbeiten\" border=\"0\"></a>') as gutschrift
+        CONCAT('<a href=\"index.php?module=gutschrift&action=edit&id=',g.id,'\" target=\"_blank\">',if(g.belegnr='0' OR g.belegnr='','ENTWURF',g.belegnr),'&nbsp;<a href=\"index.php?module=gutschrift&action=pdf&id=',g.id,'\"><img src=\"./themes/new/images/pdf.svg\" title=\"Gutschrift PDF\" border=\"0\"></a>&nbsp;<a href=\"index.php?module=gutschrift&action=edit&id=',g.id,'\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Gutschrift bearbeiten\" border=\"0\"></a>') as gutschrift
         FROM gutschrift g WHERE g.rechnungid='$id'");
 
     if(!empty($gutschrift))
@@ -806,9 +812,7 @@ class Rechnung extends GenRechnung
     if(!$this->app->DB->error())$rechnungid =true;
     
     $lieferscheinsql = "
-    SELECT CONCAT('<a href=\"index.php?module=lieferschein&action=edit&id=',l.id,'\" target=\"_blank\">',if(l.status!='angelegt',l.belegnr,'ENTWURF'),'</a>&nbsp;<a href=\"index.php?module=lieferschein&action=pdf&id=',l.id,'\">
-      <img src=\"./themes/new/images/pdf.svg\" title=\"Lieferschein PDF\" border=\"0\"></a>&nbsp;
-    <a href=\"index.php?module=lieferschein&action=edit&id=',l.id,'\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Lieferschein bearbeiten\" border=\"0\"></a>') as LS
+    SELECT l.id, CONCAT('<a href=\"index.php?module=lieferschein&action=edit&id=',l.id,'\" target=\"_blank\">',if(l.status!='angelegt',l.belegnr,'ENTWURF'),'</a>&nbsp;<a href=\"index.php?module=lieferschein&action=pdf&id=',l.id,'\"><img src=\"./themes/new/images/pdf.svg\" title=\"Lieferschein PDF\" border=\"0\"></a>&nbsp;<a href=\"index.php?module=lieferschein&action=edit&id=',l.id,'\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Lieferschein bearbeiten\" border=\"0\"></a>') as LS
     FROM lieferschein l
     INNER JOIN (
       (SELECT id FROM lieferschein WHERE id = '{$auftragArr[0]['lieferschein']}')
@@ -861,12 +865,40 @@ class Rechnung extends GenRechnung
         if(!$first)$this->app->Tpl->Add('LIEFERSCHEIN','<br>');
         $this->app->Tpl->Add('LIEFERSCHEIN',$ls['LS']);
         $first = false;
-      }
-      
+      }     
     }
     
+    if (!empty($lieferschein)) {
+        $sql = "SELECT SQL_CALC_FOUND_ROWS
+                    v.id,
+                    v.tracking as tracking,
+                    v.tracking_link
+                FROM
+                    versandpakete v
+                LEFT JOIN
+                    versandpaket_lieferschein_position vlp ON v.id = vlp.versandpaket
+                LEFT JOIN
+                    lieferschein_position lp ON lp.id = vlp.lieferschein_position
+                LEFT JOIN
+                    lieferschein l ON lp.lieferschein = l.id
+                LEFT JOIN
+                    lieferschein lop ON lop.id = v.lieferschein_ohne_pos
+                WHERE
+                    l.id IN (".implode(', ',array_column($lieferschein,'id')).")
+                GROUP BY
+                   v.id
+                ";
 
+        $tracking = $this->app->DB->SelectArr($sql);
 
+        $tracking_list = array();
+        foreach ($tracking as $single_tracking) {
+            $tracking_list[] =  '<a href="index.php?module=versandpakete&action=edit&id='.$single_tracking['id'].'">Paket Nr.'.$single_tracking['id'].'</a>'.
+                                ' ('.'<a href="'.$single_tracking['tracking_link'].'">'.$single_tracking['tracking'].'</a>'.')';
+        }
+        $this->app->Tpl->Set('TRACKING',implode('<br>',$tracking_list));
+    }
+    
     if($auftragArr[0]['ust_befreit']==0)
       $this->app->Tpl->Set('STEUER',"Inland");
     else if($auftragArr[0]['ust_befreit']==1)
@@ -920,7 +952,7 @@ class Rechnung extends GenRechnung
       $this->app->Tpl->Set('ANGEBOTTEXT',"Das Angebot wird bearbeitet und wurde noch nicht freigegeben und abgesendet!");
     }
   
-    $this->app->Tpl->Set('ZAHLUNGEN',$this->RechnungZahlung(true));
+    $this->app->Tpl->Set('ZAHLUNGEN',$this->app->YUI->BelegZahlungHTMLTable($id, 'rechnung'));
 
     $this->app->Tpl->Set('RECHNUNGADRESSE',$this->Rechnungsadresse($auftragArr[0]['id']));
 
@@ -1305,20 +1337,20 @@ class Rechnung extends GenRechnung
     }
   }
 
-  function RechnungSmarty($id = null, $json = false, $returnvalue = false) {
-        if ($id === null) {
-            $id = $this->app->Secure->GetGET('id');
-        }
+  /*
+    This function is the central interface to get all data for invoice, it should be used and expanded by all modules (E-Invoice, shop, remote, PDF, etc.)
+  */
+  function RechnungGetData($id = null) {
         $result = Array();
         $success = true;
-        
+
         $result['rechnungssteller']['name'] = $this->app->erp->Firmendaten('name');
         $result['rechnungssteller']['strasse'] = $this->app->erp->Firmendaten('strasse');
         $result['rechnungssteller']['ort'] = $this->app->erp->Firmendaten('ort');
         $result['rechnungssteller']['plz'] = $this->app->erp->Firmendaten('plz');
         $result['rechnungssteller']['land'] = $this->app->erp->Firmendaten('land');
         $result['rechnungssteller']['steuernummer'] = $this->app->erp->Firmendaten('steuernummer');
-        
+
         $rechnung = $this->app->DB->SelectRow("
             SELECT * FROM rechnung WHERE id = $id LIMIT 1
         ");
@@ -1329,15 +1361,21 @@ class Rechnung extends GenRechnung
             SELECT * FROM adresse WHERE id = (SELECT adresse FROM rechnung WHERE id = $id LIMIT 1)
         ");
         $result['adresse'] = $adresse[0];
-                      
+
+        $auftrag = $this->app->DB->SelectRow("SELECT * FROM `auftrag` WHERE `id` = '".$rechnung['auftragid']."' LIMIT 1");
+        $result['auftrag'] = $auftrag;
+
+        $lieferschein = $this->app->DB->SelectRow("SELECT * FROM `lieferschein` WHERE id = '".$rechnung['lieferschein']."' LIMIT 1");
+        $result['lieferschein'] = $lieferschein;
+
         $positionen = $this->app->DB->SelectArr("
             SELECT * FROM rechnung_position WHERE rechnung = $id ORDER BY sort ASC
-        ");    
-        
+        ");
+
         if (empty($positionen)) {
             throw new exception("Rechnung enthält keine Positionen!");
         }
-            
+
         $steuern = Array();
         $steuer_gesamt = 0;
         $umsatz_brutto_gesamt = 0;
@@ -1356,11 +1394,20 @@ class Rechnung extends GenRechnung
             $umsatz_brutto_gesamt += round($position['umsatz_brutto_gesamt'],2);
             $steuer_gesamt += round($position['umsatz_brutto_gesamt'],2)-round($position['umsatz_netto_gesamt'],2);
         }
-        
         $result['positionen'] = $positionen;
         $result['steuern'] = $steuern;
         $result['umsatz_brutto_gesamt'] = $umsatz_brutto_gesamt;
         $result['steuer_gesamt'] = $steuer_gesamt;
+
+        return($result);
+  }
+
+  function RechnungSmarty($id = null, $json = false, $returnvalue = false) {
+        if ($id === null) {
+            $id = $this->app->Secure->GetGET('id');
+        }
+        $result = $this->RechnungGetData($id);
+        $success = true;
 
         $filename = str_replace('-','',$result['kopf']['datum']).'_RE'.$result['kopf']['belegnr'];
 
@@ -1390,7 +1437,7 @@ class Rechnung extends GenRechnung
                 $output = $smarty->fetch('string:'.$template);
             }
         }
-        
+
         if ($returnvalue) {
             return(Array(
                 'success' => $success,
@@ -1404,7 +1451,7 @@ class Rechnung extends GenRechnung
             }
             echo($output);
             $this->app->ExitXentral();
-        }        
+        }
   }
 
   function RechnungSuche()
@@ -1979,8 +2026,7 @@ class Rechnung extends GenRechnung
         $nummer_neu = $this->app->Secure->GetPOST('belegnredit');
         
         $nummer_neu = $this->app->DB->real_escape_string($nummer_neu);
-        
-        if(!$this->app->DB->select("SELECT id from rechnung WHERE belegnr ='".$nummer_neu."'")) {
+        if(!$this->app->DB->select("SELECT id from rechnung WHERE belegnr ='".$nummer_neu."'") && $nummer_neu != '0' && $nummer_neu != "") {
             $this->app->DB->update("UPDATE rechnung SET belegnr ='".$nummer_neu."' WHERE id = '".$id."'");
         }
     }
@@ -1992,7 +2038,9 @@ class Rechnung extends GenRechnung
       $zahlbetrag = $this->app->Secure->GetPOST('zahlbetrag');
       $mahnwesen_gesperrt = $this->app->Secure->GetPOST('mahnwesen_gesperrt');
       $mahnwesen_internebemerkung = $this->app->Secure->GetPOST('mahnwesen_internebemerkung');
-      $zahlungsstatus = $this->app->Secure->GetPOST('zahlungsstatus');
+      if (!$schreibschutz) {
+          $zahlungsstatus = $this->app->Secure->GetPOST('zahlungsstatus');
+      }
       $mahnwesenfestsetzen = $this->app->Secure->GetPOST('mahnwesenfestsetzen');
       $mahnwesen = $this->app->Secure->GetPOST('mahnwesen');
       $internebemerkung = $this->app->Secure->GetPOST('internebemerkung');
@@ -2011,7 +2059,7 @@ class Rechnung extends GenRechnung
 
       if($bezahlt_am=='--')$bezahlt_am='0000-00-00';
       $alte_mahnstufe = $this->app->DB->Select("SELECT mahnwesen FROM rechnung WHERE id='$id' LIMIT 1");
-      if($alte_mahnstufe!=$mahnwesen) $versendet=0; 
+      if($alte_mahnstufe!=$mahnwesen) $versendet=0;     
 
 /*      if($mahnwesenfestsetzen=='1')
       {*/
@@ -2167,7 +2215,7 @@ class Rechnung extends GenRechnung
 
     $internet = $this->app->DB->Select("SELECT a.internet FROM rechnung r LEFT JOIN auftrag a ON a.id=r.auftragid WHERE r.id='$id' AND r.id > 0 LIMIT 1");
     if($internet!='') {
-      $this->app->Tpl->Set('INTERNET',"<tr><td>Internet:</td><td><input type=\"text\" size=\"30\" value=\"".$internet."\" readonly [COMMONREADONLYINPUT]></td></tr>");
+      $this->app->Tpl->Set('INTERNET',$internet);
     }
 
     $this->app->Tpl->Set('AKTIV_TAB1',"selected");
@@ -3005,50 +3053,6 @@ class Rechnung extends GenRechnung
             VALUES ('$rechnung','$artikel','$bezeichnunglieferant','$bestellnummer','$menge','$preis','$waehrung','$sort','$datum','$umsatzsteuer','angelegt','$projekt','$vpe','$beschreibung','$rabatt','$keinrabatterlaubt')");
 
     return $this->app->DB->GetInsertID();
-  }
-
-
-    /**
-   * Build the html output for minidetail containing the payments
-   * @param bool $return
-   *
-   * @return string
-   */
-  function RechnungZahlung($return=false)
-  {
-    $id = $this->app->Secure->GetGET('id');
-
-    $zahlungen = $this->app->erp->GetZahlungen($id,'rechnung'); 
-    if (!empty($zahlungen)) {
-        $et = new EasyTable($this->app);
-
-        $et->headings = array('Datum','Beleg','Betrag','W&auml;hrung');
-
-        foreach ($zahlungen as $zahlung) {
-            $row = array(
-                $zahlung['datum'],
-                "<a href=\"index.php?module=".$zahlung['doc_typ']."&action=edit&id=".$zahlung['doc_id']."\">
-                    ".ucfirst($zahlung['doc_typ'])." 
-                    ".$zahlung['doc_info']."
-                </a>",
-                $zahlung['betrag'],
-                $zahlung['waehrung']
-            );
-            $et->AddRow($row);
-        }
-
-        $salden = $this->app->erp->GetSaldenDokument($id,'rechnung');
-        foreach ($salden as $saldo) { 
-            $row = array(
-                '',
-                '<b>Saldo</b>',
-                "<b>".$saldo['betrag']."</b>",
-                "<b>".$saldo['waehrung']."</b>"
-            );
-            $et->AddRow($row);
-        }
-        return($et->DisplayNew('return',""));
-    }
   }
 
     /*
