@@ -8492,7 +8492,8 @@ XML;
     if($xmldata['name']!="" && !is_array($xmldata['name']))
     {
       //adresse anlegen
-      $xmldata['strasse'] = $xmldata['strasse']." ".$xmldata['hausnummer'];
+      // Fork: trim, sonst endet die Strasse ohne Hausnummer-Feld auf ein Leerzeichen
+      $xmldata['strasse'] = trim($xmldata['strasse']." ".$xmldata['hausnummer']);
       if($xmldata['strasse_hausnummer']!="" && !is_array($xmldata['strasse_hausnummer'])) $xmldata['strasse'] = $xmldata['strasse_hausnummer'];
 
       $xmldata['email'] = str_replace(" ","",$xmldata['email']);
@@ -8968,8 +8969,6 @@ XML;
         break;
     }
 
-    $xmldata['belegnr'] = (string)$this->app->DB->Select("SELECT belegnr FROM $doctype WHERE id = '$id' LIMIT 1");
-    if($xmldata['belegnr'] === '' || $xmldata['belegnr'] === '0'){$xmldata['belegnr'] = $this->app->erp->GetNextNummer($doctype,$xmldata['projekt'],$id);}
     if($doctype === 'bestellung')
     {
       $xmldata['lieferantkdrnummer'] = $xmldata['lieferantennummer'];
@@ -9021,6 +9020,23 @@ XML;
       if($xmldata['projekt']=='') {
         $xmldata['projekt'] = $this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id='" . $this->app->erp->Firmendaten("projekt") . "' LIMIT 1");
       }
+    }
+
+    // Fork: Belegnummer erst nach dem Projekt bestimmen und GetNextNummer die Projekt-ID geben.
+    // $xmldata['projekt'] ist hier die Abkuerzung; GetNextNummer sucht per id und fiel damit
+    // fuer Projekte mit eigenem Nummernkreis immer auf den globalen Nummernkreis zurueck.
+    $xmldata['belegnr'] = (string)$this->app->DB->Select("SELECT belegnr FROM $doctype WHERE id = '$id' LIMIT 1");
+    if($xmldata['belegnr'] === '' || $xmldata['belegnr'] === '0'){
+      $belegProjektId = 0;
+      if($xmldata['projekt'] != '' && !is_array($xmldata['projekt'])){
+        $belegProjektId = (int)$this->app->DB->Select(
+          "SELECT id FROM projekt WHERE abkuerzung='" . $xmldata['projekt'] . "' AND geloescht <> 1 LIMIT 1"
+        );
+      }
+      if($belegProjektId <= 0){
+        $belegProjektId = (int)$this->app->DB->Select("SELECT projekt FROM $doctype WHERE id = '$id' LIMIT 1");
+      }
+      $xmldata['belegnr'] = $this->app->erp->GetNextNummer($doctype, $belegProjektId, $id);
     }
 
     $this->app->DB->Update("UPDATE $doctype SET belegnr='".$xmldata['belegnr']."' WHERE id='".$id."' LIMIT 1");
@@ -9583,6 +9599,71 @@ XML;
     }
 
     /**
+     * Fork: Auftrag zu Lieferschein weiterfuehren, wie der Button "Lieferschein" im Auftrag.
+     * Der Lieferschein wird nur angelegt, die Freigabe folgt per LieferscheinFreigabe.
+     * Gibt es zum Auftrag schon einen nicht stornierten Lieferschein, wird dieser zurueckgegeben
+     * (<vorhanden>1</vorhanden>) statt einen zweiten anzulegen.
+     *
+     * @param bool $intern
+     * @param null $id Auftrags-ID
+     *
+     * @return array|null
+     */
+    public function ApiAuftragZuLieferschein($intern = false, $id = null)
+    {
+      if($id==''){
+        $id = $this->getIdFromData();
+      }
+      $id = (int)$id;
+      $order = $id > 0 ? $this->app->DB->SelectRow(
+        sprintf('SELECT id, status FROM auftrag WHERE id = %d LIMIT 1', $id)
+      ) : null;
+      if(empty($order)) {
+        if($intern) {
+          return null;
+        }
+        $this->XMLResponse(5, 'order not found');
+      }
+
+      $existing = $this->app->DB->SelectRow(
+        sprintf(
+          "SELECT id, belegnr FROM lieferschein WHERE auftragid = %d AND status <> 'storniert' ORDER BY id LIMIT 1",
+          $id
+        )
+      );
+      if(!empty($existing)) {
+        $ret = ['id' => $existing['id'], 'belegnr' => $existing['belegnr'], 'vorhanden' => 1];
+      }
+      else {
+        if($order['status'] !== 'freigegeben') {
+          if($intern) {
+            return null;
+          }
+          $this->XMLResponse(8, 'order status is '.$order['status'].', expected freigegeben');
+        }
+        $newid = (int)$this->app->erp->WeiterfuehrenAuftragZuLieferschein($id);
+        if($newid <= 0) {
+          if($intern) {
+            return null;
+          }
+          $this->XMLResponse(8, 'no positions for a delivery note');
+        }
+        $ret = [
+          'id' => $newid,
+          'belegnr' => (string)$this->app->DB->Select(sprintf('SELECT belegnr FROM lieferschein WHERE id = %d', $newid)),
+          'vorhanden' => 0,
+        ];
+      }
+      if($intern) {
+        return $ret;
+      }
+      $this->XMLResponse(
+        1,
+        '<id>'.$ret['id'].'</id><auftrag>'.$id.'</auftrag><belegnr>'.$ret['belegnr'].'</belegnr><vorhanden>'.$ret['vorhanden'].'</vorhanden>'
+      );
+    }
+
+    /**
      * @param string $typ
      * @param int    $id
      *
@@ -9791,7 +9872,8 @@ XML;
     }
 
     if($xmldata['projekt'] <=0){
-      $xmldata['projekt'] = $this->app->erp->ImportGetStandardProjekt();
+      // Fork: ImportGetStandardProjekt() gibt es in OpenXE nicht (PHP-Fatal, halber Beleg ohne Positionen)
+      $xmldata['projekt'] = $this->app->erp->Firmendaten('projekt');
     }
 
     // schaue ob kundennummer angebene ist und mache Load
